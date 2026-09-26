@@ -543,8 +543,8 @@ async function renderHome(){
         </div>
 
         <div>
-          <strong>2026</strong>
-          <span>الموسم الحالي</span>
+          <strong id="onlineCount">—</strong>
+          <span>متصل الآن</span>
         </div>
 
       </div>
@@ -756,14 +756,84 @@ async function renderHome(){
       };
 
     });
+
+  const onlineCount = await getOnlineCount();
+  const onlineEl = document.querySelector('#onlineCount');
+  if(onlineEl) onlineEl.textContent = onlineCount;
+
+  setTimeout(async () => {
+    const count = await getOnlineCount();
+    const el = document.querySelector('#onlineCount');
+    if(el) el.textContent = count;
+  }, 30000);
 }
 
+
+async function heartbeat(){
+  const token = getToken();
+  if(!token) return;
+
+  try{
+    await fetch(`${API}/api/presence/heartbeat`,{
+      method:'POST',
+      headers:{Authorization:`Bearer ${token}`},
+      cache:'no-store'
+    });
+  }catch(error){}
+}
+
+async function getOnlineCount(){
+  try{
+    const response = await fetch(`${API}/api/presence/online-count`,{
+      cache:'no-store'
+    });
+    const result = await response.json();
+    return result.ok ? Number(result.count || 0) : 0;
+  }catch(error){
+    return 0;
+  }
+}
+
+function profileLink(user){
+  const slug = user?.profile_slug || `u-${user?.id || ''}`;
+  return `${location.origin}${location.pathname}#profile/${encodeURIComponent(slug)}`;
+}
+
+async function openProfile(identifier){
+  if(!identifier) return;
+  location.hash = `profile/${encodeURIComponent(identifier)}`;
+  await page('profile', identifier);
+}
+
+async function copyProfileLink(user){
+  const link = profileLink(user);
+  try{
+    await navigator.clipboard.writeText(link);
+    alert('تم نسخ رابط الملف الشخصي.');
+  }catch(error){
+    prompt('انسخ رابط الملف الشخصي:', link);
+  }
+}
+
+async function loadPublicProfile(identifier){
+  const response = await fetch(
+    `${API}/api/profile/${encodeURIComponent(identifier)}`,
+    {cache:'no-store'}
+  );
+  const result = await response.json();
+
+  if(!response.ok || !result.ok){
+    throw new Error(result.message || 'تعذر تحميل الملف الشخصي.');
+  }
+
+  return result.user;
+}
 
 /* =========================
    PAGE ROUTER
 ========================= */
 
-async function page(p){
+async function page(p, profileIdentifier = null){
 
   document
     .querySelectorAll(
@@ -1238,7 +1308,7 @@ async function page(p){
   */
 
   if(
-    ['profile','chat'].includes(p) &&
+    p === 'chat' &&
     !currentUser
   ){
 
@@ -1377,37 +1447,99 @@ async function page(p){
 
   if(p === 'profile'){
 
-    app.innerHTML = `
+    const identifier = profileIdentifier ||
+      currentUser?.profile_slug ||
+      currentUser?.id;
 
-      <div class="section-title">
-        <h2>ملفي الشخصي</h2>
-      </div>
+    if(!identifier){
+      page('login');
+      return;
+    }
 
-      <article class="card">
+    try{
+      const user = await loadPublicProfile(identifier);
+      const isSelf = currentUser &&
+        Number(currentUser.id) === Number(user.id);
 
-        <h3>
-          ${escapeHTML(
-            currentUser?.full_name || ''
-          )}
-        </h3>
+      const avatar = user.avatar_url
+        ? `<img src="${escapeHTML(user.avatar_url)}" alt="الصورة الشخصية">`
+        : '👤';
 
-        <p>
-          رقم القيد:
-          ${escapeHTML(
-            currentUser?.student_id || ''
-          )}
-        </p>
+      const background = user.avatar_url
+        ? `style="--profile-bg:url("${escapeHTML(user.avatar_url)}")"`
+        : '';
 
-        <p>
-          الصلاحية:
-          ${escapeHTML(
-            currentUser?.role || 'member'
-          )}
-        </p>
+      app.innerHTML = `
+        <section class="profile-hero" ${background}>
+          <div class="profile-bg-blur"></div>
+          <div class="profile-hero-content">
+            <button class="profile-back" onclick="page('home')">‹</button>
+            <div class="profile-avatar-large">${avatar}</div>
+            <div class="profile-main-info">
+              <h1>${escapeHTML(user.full_name)}</h1>
+              <div class="profile-meta">
+                <span class="role-badge">${escapeHTML(user.role)}</span>
+                <span class="presence-dot ${user.online ? 'online' : ''}"></span>
+                <span>${user.online ? 'متصل الآن' : 'غير متصل'}</span>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      </article>
+        <article class="card profile-card">
+          <div class="profile-actions">
+            <button class="btn" id="copyProfileBtn">🔗 نسخ رابط الملف</button>
+            ${isSelf ? '<button class="btn secondary" id="editProfileBtn">✎ تعديل الملف</button>' : ''}
+          </div>
 
-    `;
+          <div class="profile-field">
+            <span>السنة الدراسية</span>
+            <strong>${escapeHTML(user.academic_year || 'غير محددة')}</strong>
+          </div>
+
+          <div class="profile-field">
+            <span>السيرة الذاتية</span>
+            <p>${escapeHTML(user.bio || 'لم يضف صاحب الحساب سيرة ذاتية بعد.')}</p>
+          </div>
+
+          ${user.email ? `
+            <div class="profile-field">
+              <span>البريد الإلكتروني</span>
+              <strong>${escapeHTML(user.email)}</strong>
+            </div>
+          ` : ''}
+
+          ${user.phone ? `
+            <div class="profile-field">
+              <span>الهاتف</span>
+              <strong>${escapeHTML(user.phone)}</strong>
+            </div>
+          ` : ''}
+
+          <div class="profile-link-box">
+            <span>رابط الملف العام</span>
+            <code>${escapeHTML(profileLink(user))}</code>
+          </div>
+        </article>
+      `;
+
+      document.querySelector('#copyProfileBtn').onclick =
+        () => copyProfileLink(user);
+
+      if(isSelf){
+        document.querySelector('#editProfileBtn').onclick =
+          () => renderProfileEditor(user);
+      }
+
+    }catch(error){
+      app.innerHTML = `
+        <div class="empty">
+          <h3>تعذر فتح الملف الشخصي</h3>
+          <p>${escapeHTML(error.message)}</p>
+          <button class="btn" onclick="page('home')">العودة للرئيسية</button>
+        </div>
+      `;
+    }
 
     return;
   }
@@ -1431,6 +1563,157 @@ async function page(p){
 
     return;
   }
+}
+
+
+async function renderProfileEditor(user){
+
+  app.innerHTML = `
+    <div class="section-title">
+      <h2>تعديل الملف الشخصي</h2>
+      <span>Profile</span>
+    </div>
+
+    <article class="card">
+      <form class="form" id="profileForm">
+
+        <label>
+          الصورة الشخصية
+          <input id="avatarInput" type="file" accept="image/*">
+          <div class="avatar-upload-preview" id="avatarPreview">
+            ${user.avatar_url
+              ? `<img src="${escapeHTML(user.avatar_url)}" alt="preview">`
+              : '👤'}
+          </div>
+        </label>
+
+        <label>
+          الاسم
+          <input name="full_name" maxlength="150" value="${escapeHTML(user.full_name || '')}" required>
+        </label>
+
+        <label>
+          السنة الدراسية
+          <input name="academic_year" maxlength="50" value="${escapeHTML(user.academic_year || '')}" placeholder="مثال: السنة الثالثة">
+        </label>
+
+        <label>
+          السيرة الذاتية
+          <textarea name="bio" maxlength="1000" placeholder="اكتب نبذة مختصرة عنك...">${escapeHTML(user.bio || '')}</textarea>
+        </label>
+
+        <label>
+          البريد الإلكتروني
+          <input name="email" type="email" value="${escapeHTML(user.email || '')}">
+        </label>
+
+        <label>
+          الهاتف
+          <input name="phone" value="${escapeHTML(user.phone || '')}">
+        </label>
+
+        <label>
+          كلمة مرور جديدة
+          <input name="password" type="password" minlength="8" placeholder="اتركها فارغة إذا لم ترد تغييرها">
+        </label>
+
+        <label class="check-row">
+          <input name="show_email" type="checkbox" ${user.privacy_settings?.show_email ? 'checked' : ''}>
+          إظهار البريد في الملف العام
+        </label>
+
+        <label class="check-row">
+          <input name="show_phone" type="checkbox" ${user.privacy_settings?.show_phone ? 'checked' : ''}>
+          إظهار الهاتف في الملف العام
+        </label>
+
+        <label class="check-row">
+          <input name="show_online" type="checkbox" ${user.show_online !== false ? 'checked' : ''}>
+          إظهار حالة الاتصال للآخرين
+        </label>
+
+        <div class="profile-permission-note">
+          الصلاحية الحالية: <b>${escapeHTML(user.role)}</b>.
+          لا يمكن تغيير الدور أو الصلاحيات من الملف الشخصي.
+        </div>
+
+        <button class="btn" id="saveProfileBtn">حفظ التغييرات</button>
+        <div id="profileSaveStatus"></div>
+      </form>
+    </article>
+  `;
+
+  let avatarData = user.avatar_url || null;
+
+  document.querySelector('#avatarInput').onchange = event => {
+    const file = event.target.files?.[0];
+    if(!file) return;
+
+    if(file.size > 2200000){
+      alert('الصورة كبيرة جداً. اختر صورة أقل من 2.2MB.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      avatarData = reader.result;
+      document.querySelector('#avatarPreview').innerHTML =
+        `<img src="${escapeHTML(avatarData)}" alt="preview">`;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  document.querySelector('#profileForm').onsubmit = async event => {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form));
+    const status = document.querySelector('#profileSaveStatus');
+    const button = document.querySelector('#saveProfileBtn');
+
+    button.disabled = true;
+    status.textContent = 'جارٍ حفظ الملف...';
+
+    try{
+      const response = await fetch(`${API}/api/profile`,{
+        method:'PUT',
+        headers:{
+          'Content-Type':'application/json',
+          Authorization:`Bearer ${getToken()}`
+        },
+        body:JSON.stringify({
+          full_name:data.full_name,
+          academic_year:data.academic_year,
+          bio:data.bio,
+          email:data.email || null,
+          phone:data.phone || null,
+          avatar_url:avatarData,
+          privacy_settings:{
+            show_email:form.elements.show_email.checked,
+            show_phone:form.elements.show_phone.checked,
+            show_online:form.elements.show_online.checked
+          },
+          password:data.password || undefined
+        })
+      });
+
+      const result = await response.json();
+
+      if(!response.ok || !result.ok){
+        throw new Error(result.message || 'تعذر حفظ التغييرات.');
+      }
+
+      currentUser = result.user;
+      updateDrawer();
+      status.textContent = 'تم حفظ الملف الشخصي بنجاح.';
+      setTimeout(() => page('profile', currentUser.profile_slug || currentUser.id), 500);
+
+    }catch(error){
+      status.textContent = error.message;
+      button.disabled = false;
+    }
+  };
 }
 
 
@@ -1494,11 +1777,28 @@ document
 
   await loadCurrentUser();
 
-  /*
-    التطبيق يبدأ دائماً كـGuest
-    إذا لم توجد جلسة صالحة.
-  */
+  await heartbeat();
 
-  page('home');
+  setInterval(heartbeat, 30000);
+
+  const hash = location.hash.replace(/^#/, '');
+  if(hash.startsWith('profile/')){
+    const identifier = decodeURIComponent(hash.slice('profile/'.length));
+    page('profile', identifier);
+  }else{
+    /*
+      التطبيق يبدأ دائماً كـGuest
+      إذا لم توجد جلسة صالحة.
+    */
+    page('home');
+  }
+
+  window.addEventListener('hashchange', () => {
+    const next = location.hash.replace(/^#/, '');
+    if(next.startsWith('profile/')){
+      const identifier = decodeURIComponent(next.slice('profile/'.length));
+      page('profile', identifier);
+    }
+  });
 
 })();
