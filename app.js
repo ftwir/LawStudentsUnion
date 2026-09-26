@@ -1479,7 +1479,7 @@ async function page(p, profileIdentifier = null){
 
     if(!currentUser){ page('login'); return; }
 
-    app.innerHTML=\`
+    app.innerHTML=`
       <div class="chat-app">
         <aside class="chat-list card">
           <div class="chat-list-head"><h2>الدردشات</h2><button class="chat-new-btn" id="newChat">＋</button></div>
@@ -1503,14 +1503,14 @@ async function page(p, profileIdentifier = null){
           <label>اختيار الأعضاء<input id="chatMembersSearch" placeholder="ابحث بالاسم أو رقم القيد"></label>
           <div id="chatUsers"></div><button class="btn" id="createChatBtn">إنشاء</button>
         </div>
-      </div>\`;
+      </div>`;
     let conversations=[],active=null,selected=[];
     const list=document.querySelector('#chatList'),messages=document.querySelector('#chatMessages');
     async function loadConversations(){
       const rr=await fetch(API+'/api/chat/conversations',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر تحميل الدردشات.');
       conversations=xx.conversations||[];
-      list.innerHTML=conversations.length?conversations.map(c=>\`<button class="chat-row" data-cid="\${c.id}"><span class="chat-row-avatar">\${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>\${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>\${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>\`).join(''):'<div class="empty">لا توجد محادثات بعد.</div>';
+      list.innerHTML=conversations.length?conversations.map(c=>`<button class="chat-row" data-cid="\${c.id}"><span class="chat-row-avatar">\${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>\${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>\${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>`).join(''):'<div class="empty">لا توجد محادثات بعد.</div>';
       list.querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.cid)));
     }
     async function openChat(id){
@@ -1519,14 +1519,14 @@ async function page(p, profileIdentifier = null){
       document.querySelector('#chatTitle').textContent=active.name||active.members.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ');
       document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.members.length+' أعضاء';
       const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
-      messages.innerHTML=(xx.messages||[]).map(m=>\`<div class="bubble \${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>\${escapeHTML(m.sender.full_name)}</small><div>\${escapeHTML(m.body)}</div><time>\${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>\`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
+      messages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble \${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>\${escapeHTML(m.sender.full_name)}</small><div>\${escapeHTML(m.body)}</div><time>\${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
       messages.scrollTop=messages.scrollHeight;
     }
     document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;if(!input.value.trim())return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';await openChat(active.id);await loadConversations();};
     document.querySelector('#newChat').onclick=()=>document.querySelector('#chatModal').hidden=false;
     document.querySelector('#closeChatModal').onclick=()=>document.querySelector('#chatModal').hidden=true;
     document.querySelector('#chatType').onchange=e=>document.querySelector('#chatNameWrap').style.display=e.target.value==='direct'?'none':'block';
-    async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>\`<button class="member-pick \${selected.includes(Number(u.id))?'selected':''}" data-uid="\${u.id}">\${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} \${escapeHTML(u.full_name)}</button>\`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
+    async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick \${selected.includes(Number(u.id))?'selected':''}" data-uid="\${u.id}">\${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} \${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
     document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
     document.querySelector('#createChatBtn').onclick=async()=>{const type=document.querySelector('#chatType').value;const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name:document.querySelector('#chatName').value.trim(),member_ids:selected})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إنشاء المحادثة.');return;}document.querySelector('#chatModal').hidden=true;selected=[];await loadConversations();openChat(Number(xx.conversation.id));};
     await loadConversations();
