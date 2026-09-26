@@ -3,6 +3,8 @@ const API = 'https://lawstudentsunionapi.onrender.com';
 const app = document.querySelector('#app');
 
 let currentUser = null;
+let currentPageName='home';
+let chatPollTimer=null;
 
 /* =========================
    AUTH
@@ -583,16 +585,7 @@ async function renderHome(){
 }
 
 
-async function heartbeat(){
-  const token = getToken();
-  if(!token) return;
-
-  try{
-    await fetch(`${API}/api/presence/heartbeat`,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${token}`},
-      cache:'no-store'
-    });
+async function heartbeat(){const token=getToken();if(!token)return;try{await fetch(`${API}/api/presence/heartbeat`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({page:currentPageName}),cache:'no-store'});
   }catch(error){}
 }
 
@@ -630,10 +623,8 @@ async function copyProfileLink(user){
 }
 
 async function loadPublicProfile(identifier){
-  const response = await fetch(
-    `${API}/api/profile/${encodeURIComponent(identifier)}`,
-    {cache:'no-store'}
-  );
+  const headers=getToken()?{Authorization:`Bearer ${getToken()}`} : {};
+  const response = await fetch(`${API}/api/profile/${encodeURIComponent(identifier)}`,{headers,cache:'no-store'});
   const result = await response.json();
 
   if(!response.ok || !result.ok){
@@ -854,6 +845,7 @@ async function renderManagementPage(target){
 }
 
 async function page(p, profileIdentifier = null){
+  currentPageName=p;if(p!=='chat'&&chatPollTimer){clearInterval(chatPollTimer);chatPollTimer=null;}heartbeat();
 
   document
     .querySelectorAll(
@@ -1388,7 +1380,7 @@ async function page(p, profileIdentifier = null){
             <div class="profile-main-info">
               <h1>${escapeHTML(user.full_name)}</h1>
               <div class="profile-meta">
-                <span class="role-badge">عضو</span>
+                <span class="role-badge">${escapeHTML(user.role === 'admin' ? 'Admin' : user.role === 'owner' && isSelf ? 'Owner' : 'عضو')}</span>
                 <span class="presence-dot ${user.online ? 'online' : ''}"></span>
                 <span>${user.online ? 'متصل الآن' : 'غير متصل'}</span>
               </div>
@@ -1431,6 +1423,7 @@ async function page(p, profileIdentifier = null){
             <code>${escapeHTML(profileLink(user))}</code>
           </div>
         </article>
+        <section class="card profile-friends-card"><div class="section-title compact"><h3>الأصدقاء</h3><span id="friendsCount">جارٍ التحميل...</span></div><div id="profileFriends" class="profile-friends-list"><div class="empty">جارٍ تحميل الأصدقاء...</div></div></section>
       `;
 
       document.querySelector('#copyProfileBtn').onclick =
@@ -1438,7 +1431,9 @@ async function page(p, profileIdentifier = null){
 
       if(isSelf){
         document.querySelector('#editProfileBtn').onclick = () => renderProfileEditor(user);
-      }else{
+      }
+      try{const rr=await fetch(API+'/api/friends',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});const xx=await rr.json();const friends=xx.friends||[];const fb=document.querySelector('#profileFriends'),fc=document.querySelector('#friendsCount');if(fc)fc.textContent=friends.length+' صديق';if(fb)fb.innerHTML=friends.length?friends.map(f=>'<button class="profile-friend" data-profile="'+escapeHTML(f.profile_slug||f.id)+'"><span class="profile-friend-avatar">'+(f.avatar_url?'<img src="'+escapeHTML(f.avatar_url)+'" alt="">':'👤')+'</span><span><strong>'+escapeHTML(f.full_name)+'</strong><small>'+escapeHTML(f.academic_year||'عضو الاتحاد')+'</small></span></button>').join(''):'<div class="empty">لا توجد صداقات بعد.</div>';fb?.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>openProfile(b.dataset.profile));}catch(e){}
+      if(!isSelf){
         const fb=document.querySelector('#friendBtn');
         try{
           const fr=await fetch(API+'/api/friends/status/'+user.id,{headers:{Authorization:'Bearer '+getToken()}});
@@ -1510,7 +1505,7 @@ async function page(p, profileIdentifier = null){
       </div>
       <div id="chatModal" class="chat-modal" hidden>
         <div class="chat-modal-card card">
-          <button class="modal-close" id="closeChatModal">×</button><h3>محادثة جديدة</h3>
+          <button class="modal-close" id="closeChatModal" type="button" aria-label="إغلاق">×</button><h3 id="chatModalTitle">محادثة جديدة</h3>
           <label>النوع<select id="chatType"><option value="direct">خاصة — عضو مع عضو</option><option value="group">خاصة — عدة أعضاء</option><option value="public">عامة — قناة</option></select></label>
           <label id="chatNameWrap">اسم القناة أو المجموعة<input id="chatName" maxlength="120"></label>
           <label>اختيار الأعضاء<input id="chatMembersSearch" placeholder="ابحث بالاسم أو رقم القيد"></label>
@@ -1526,7 +1521,7 @@ async function page(p, profileIdentifier = null){
       list.innerHTML=conversations.length?conversations.map(c=>`<button class="chat-row" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>`).join(''):'<div class="empty">لا توجد محادثات بعد.</div>';
       list.querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.cid)));
     }
-    async function openChat(id){
+    async function openChat(id,preserveScroll=false){
       active=conversations.find(c=>Number(c.id)===id);if(!active)return;
       document.querySelector('#chatEmpty').hidden=true;document.querySelector('#chatActive').hidden=false;
       document.querySelector('#chatTitle').textContent=active.name||active.members.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ');
@@ -1536,12 +1531,13 @@ async function page(p, profileIdentifier = null){
       messages.scrollTop=messages.scrollHeight;
     }
     document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;if(!input.value.trim())return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';await openChat(active.id);await loadConversations();};
-    document.querySelector('#closeChatModal').onclick=()=>document.querySelector('#chatModal').hidden=true;
-     document.querySelector('#chatType').onchange=e=>{document.querySelector('#chatNameWrap').style.display=e.target.value==='direct'?'none':'block';document.querySelector('#chatModalTitle').textContent=e.target.value==='group'?'إنشاء غرفة جماعية':'إنشاء دردشة خاصة';};
+    document.querySelector('#closeChatModal').onclick=closeCreateChatModal;document.querySelector('#chatModal').onclick=e=>{if(e.target.id==='chatModal')closeCreateChatModal();};
+     document.querySelector('#chatType').onchange=e=>{document.querySelector('#chatNameWrap').style.display=e.target.value==='direct'?'none':'block';document.querySelector('#chatModalTitle').textContent=e.target.value==='group'?'إنشاء مجموعة':e.target.value==='direct'?'محادثة خاصة':'إنشاء قناة عامة';};
     async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
     document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
-    document.querySelector('#createChatBtn').onclick=async()=>{const type=document.querySelector('#chatType').value;const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name:document.querySelector('#chatName').value.trim(),member_ids:selected})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إنشاء المحادثة.');return;}document.querySelector('#chatModal').hidden=true;selected=[];await loadConversations();openChat(Number(xx.conversation.id));};
+    document.querySelector('#createChatBtn').onclick=async()=>{const type=document.querySelector('#chatType').value;const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name:document.querySelector('#chatName').value.trim(),member_ids:selected})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إنشاء المحادثة.');return;}closeCreateChatModal();selected=[];await loadConversations();openChat(Number(xx.conversation.id));};
     await loadConversations();
+    chatPollTimer=setInterval(async()=>{try{await loadConversations();if(active)await openChat(active.id,true);}catch(e){}},1800);
     return;
 
   }
@@ -1707,8 +1703,11 @@ async function renderProfileEditor(user){
 }
 
 
+function closeCreateChatModal(){const modal=document.querySelector('#chatModal');if(!modal)return;modal.classList.remove('open');setTimeout(()=>{if(modal)modal.hidden=true;},180);}
+async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
 function openCreationHub(){
   if(!currentUser){ page('login'); return; }
+  const existing=document.querySelector('#creationHub');if(existing){existing.classList.toggle('open');return;}
   const modal=document.createElement('div');
   modal.id='creationHub';
   modal.className='creation-hub';
@@ -1725,7 +1724,7 @@ function openCreationHub(){
     </div>
   </div>`;
   document.body.appendChild(modal);
-  const close=()=>modal.remove();
+  const close=()=>{modal.classList.remove('open');setTimeout(()=>modal.remove(),180);};
   modal.querySelector('.creation-hub-close').onclick=close;
   modal.onclick=e=>{if(e.target===modal)close();};
   modal.querySelectorAll('[data-create]').forEach(btn=>btn.onclick=async()=>{
@@ -1812,6 +1811,7 @@ document
 
 
 document.querySelectorAll('#globalTabs [data-page]').forEach(button=>button.onclick=()=>page(button.dataset.page));
+const drawerProfile=document.querySelector('.drawer-profile');drawerProfile?.addEventListener('click',event=>{if(event.target.closest('#close'))return;if(currentUser){drawer(false);page('profile',currentUser.profile_slug||currentUser.id);}});
 
 /* =========================
    START
