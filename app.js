@@ -651,11 +651,24 @@ async function renderPostsPage(){
 async function renderCreatePost(){
   if(!currentUser){page('login');return;}
   app.innerHTML=`<div class="section-title"><h2>إنشاء</h2><span>شارك مع المجتمع</span></div>
-  <div class="create-type-grid"><button class="create-type active" data-type="post">منشور</button><button class="create-type" data-type="poll">استطلاع رأي</button><button class="create-type" data-type="article">مقال</button></div>
-  <article class="card" id="createBox"></article>`;
+   <div class="create-type-grid">
+     <button class="create-type active" data-type="post"><span>✦</span><strong>منشور</strong><small>شارك فكرة أو صورة</small></button>
+     <button class="create-type" data-type="poll"><span>◉</span><strong>استفتاء</strong><small>اسأل مجتمع الطلبة</small></button>
+     <button class="create-type" data-type="article"><span>▤</span><strong>مقال</strong><small>اكتب محتوى متكاملاً</small></button>
+     <button class="create-type" data-type="chat"><span>◌</span><strong>دردشة</strong><small>خاصة أو غرفة جماعية</small></button>
+   </div>
+   <article class="card" id="createBox"></article>`;
   const box=document.querySelector('#createBox');
   function render(type){
     document.querySelectorAll('.create-type').forEach(b=>b.classList.toggle('active',b.dataset.type===type));
+    if(type==='chat'){ box.innerHTML=`<div class="create-chat-choice">
+      <button class="create-chat-option" id="createPrivateChat"><span>◉</span><strong>دردشة خاصة</strong><small>محادثة مباشرة مع عضو</small></button>
+      <button class="create-chat-option" id="createGroupChat"><span>◎</span><strong>غرفة جماعية</strong><small>اجمع عدة أعضاء في غرفة واحدة</small></button>
+    </div>`;
+      document.querySelector('#createPrivateChat').onclick=()=>openCreateChatModal('direct');
+      document.querySelector('#createGroupChat').onclick=()=>openCreateChatModal('group');
+      return;
+    }
     if(type==='poll'){
       box.innerHTML=`<form class="form" id="pollForm"><label>السؤال<textarea name="question" rows="3" required placeholder="ما رأيك؟"></textarea></label><div id="pollOptions"><input name="option" placeholder="الخيار 1" required><input name="option" placeholder="الخيار 2" required></div><button type="button" class="btn secondary" id="addOption">+ إضافة خيار</button><button class="btn">نشر الاستطلاع</button><div id="createStatus"></div></form>`;
       document.querySelector('#addOption').onclick=()=>{const wrap=document.querySelector('#pollOptions');if(wrap.children.length<8){const i=document.createElement('input');i.name='option';i.placeholder='خيار جديد';wrap.appendChild(i);}};
@@ -1523,9 +1536,8 @@ async function page(p, profileIdentifier = null){
       messages.scrollTop=messages.scrollHeight;
     }
     document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;if(!input.value.trim())return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';await openChat(active.id);await loadConversations();};
-    document.querySelector('#newChat').onclick=()=>document.querySelector('#chatModal').hidden=false;
     document.querySelector('#closeChatModal').onclick=()=>document.querySelector('#chatModal').hidden=true;
-    document.querySelector('#chatType').onchange=e=>document.querySelector('#chatNameWrap').style.display=e.target.value==='direct'?'none':'block';
+     document.querySelector('#chatType').onchange=e=>{document.querySelector('#chatNameWrap').style.display=e.target.value==='direct'?'none':'block';document.querySelector('#chatModalTitle').textContent=e.target.value==='group'?'إنشاء غرفة جماعية':'إنشاء دردشة خاصة';};
     async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
     document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
     document.querySelector('#createChatBtn').onclick=async()=>{const type=document.querySelector('#chatType').value;const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name:document.querySelector('#chatName').value.trim(),member_ids:selected})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إنشاء المحادثة.');return;}document.querySelector('#chatModal').hidden=true;selected=[];await loadConversations();openChat(Number(xx.conversation.id));};
@@ -1692,6 +1704,42 @@ async function renderProfileEditor(user){
 }
 
 
+function openCreationHub(){
+  if(!currentUser){ page('login'); return; }
+  const modal=document.createElement('div');
+  modal.id='creationHub';
+  modal.className='creation-hub';
+  modal.innerHTML=`<div class="creation-hub-card">
+    <button class="creation-hub-close" aria-label="إغلاق">×</button>
+    <div class="creation-hub-icon">＋</div>
+    <h3>ماذا تريد أن تنشئ؟</h3>
+    <p>اختر نوع المحتوى الذي تريد مشاركته مع مجتمع الاتحاد.</p>
+    <div class="creation-hub-grid">
+      <button data-create="post"><span>✦</span><strong>منشور</strong><small>فكرة، صورة أو تحديث</small></button>
+      <button data-create="poll"><span>◉</span><strong>استفتاء</strong><small>اسأل أعضاء المجتمع</small></button>
+      <button data-create="article"><span>▤</span><strong>مقال</strong><small>محتوى طويل ومنظم</small></button>
+      <button data-create="chat"><span>◌</span><strong>دردشة</strong><small>خاصة أو جماعية</small></button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();
+  modal.querySelector('.creation-hub-close').onclick=close;
+  modal.onclick=e=>{if(e.target===modal)close();};
+  modal.querySelectorAll('[data-create]').forEach(btn=>btn.onclick=async()=>{
+    const type=btn.dataset.create;
+    close();
+    if(type==='chat'){
+      await page('chat');
+      requestAnimationFrame(()=>openCreateChatModal('direct'));
+    }else{
+      await page('create');
+      const tab=document.querySelector('.create-type[data-type="'+type+'"]');
+      if(tab) tab.click();
+    }
+  });
+  requestAnimationFrame(()=>modal.classList.add('open'));
+}
+
 function markNotificationsRead(){
   fetch(API+'/api/user-notifications/read-all',{method:'POST',headers:{Authorization:'Bearer '+getToken()}}).then(()=>updateNotificationDot()).catch(()=>{});
 }
@@ -1753,9 +1801,9 @@ document
   .forEach(button => {
 
     button.onclick = () => {
-
-      page(button.dataset.page);
-    };
+       if(button.classList.contains('create-btn')){ openCreationHub(); return; }
+       page(button.dataset.page);
+     };
 
   });
 
