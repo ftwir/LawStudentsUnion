@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -10,13 +11,42 @@ const GITHUB_REF = process.env.GITHUB_REF || "main";
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
+function safeEqual(a, b) {
+    if (typeof a !== "string" || typeof b !== "string") return false;
+    const aa = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
+}
+
 function managerAuth(req, res, next) {
+    // Preferred login: HTTP Basic Auth using the same owner credentials
+    // configured in Render as OWNER_LOGIN / OWNER_PASSWORD.
+    const auth = req.headers.authorization || "";
+    if (auth.startsWith("Basic ")) {
+        try {
+            const decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
+            const separator = decoded.indexOf(":");
+            const login = separator >= 0 ? decoded.slice(0, separator) : "";
+            const password = separator >= 0 ? decoded.slice(separator + 1) : "";
+            if (
+                safeEqual(login, process.env.OWNER_LOGIN) &&
+                safeEqual(password, process.env.OWNER_PASSWORD)
+            ) {
+                return next();
+            }
+        } catch (_) {}
+    }
+
+    // Backward-compatible master-passcode authentication.
     const passcode = process.env.OWNER_MASTER_PASSCODE;
     const supplied = req.headers["x-owner-master-passcode"];
-    if (!passcode || !supplied || supplied !== passcode) {
-        return res.status(401).json({ ok: false, message: "Manager authentication required." });
-    }
-    next();
+    if (passcode && supplied && safeEqual(supplied, passcode)) return next();
+
+    return res.status(401).json({
+        ok: false,
+        message: "Manager authentication required.",
+        hint: "Use the Owner login and password configured in Render."
+    });
 }
 
 app.get("/health", (req, res) => {
