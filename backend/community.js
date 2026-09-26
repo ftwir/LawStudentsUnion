@@ -150,6 +150,25 @@ app.get("/api/posts", async (req, res) => {
     }
 });
 
+app.delete("/api/admin/registrations/:id", requireRoles("owner"), async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id)) return res.status(400).json({ ok: false, message: "Invalid application ID." });
+        const existing = await pool.query("SELECT id, status, user_id FROM registrations WHERE id = $1 LIMIT 1", [id]);
+        if (!existing.rows.length) return res.status(404).json({ ok: false, message: "Application not found." });
+        await pool.query("DELETE FROM registrations WHERE id = $1", [id]);
+        await pool.query(
+            `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+             VALUES ($1, 'membership.application_deleted', 'registration', $2, $3::jsonb)`,
+            [req.user.id, id, JSON.stringify({ status: existing.rows[0].status, user_id: existing.rows[0].user_id, deleted_by_role: req.user.role })]
+        );
+        res.json({ ok: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not delete membership application." });
+    }
+});
+
 app.post("/api/posts", requireAuth(async (req, res) => {
     try {
         const section = normalizeSection(req.body.section || "community");
@@ -557,11 +576,13 @@ app.get("/api/admin/registrations", requireRoles("admin", "owner"), async (req, 
         const result = await pool.query(
             `SELECT r.id, r.full_name, r.student_id, r.academic_year, r.email,
                     r.phone, r.note, r.status, r.rejection_reason,
-                    r.created_at, r.reviewed_at,
+                    r.created_at, r.reviewed_at, r.archived_at,
+                    archive_user.full_name AS archived_by_name,
                     reviewer.full_name AS reviewer_name
              FROM registrations r
              LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
-             ORDER BY r.created_at DESC
+             LEFT JOIN users archive_user ON archive_user.id = r.archived_by
+             ORDER BY (r.archived_at IS NULL) DESC, r.created_at DESC
              LIMIT 300`
         );
         res.json({ ok: true, applications: result.rows });
@@ -600,7 +621,13 @@ app.patch("/api/admin/registrations/:id", requireRoles("admin", "owner"), async 
 
         await pool.query(
             `UPDATE registrations
-             SET status = $1, rejection_reason = $2, reviewed_by = $3, reviewed_at = NOW(), user_id = $4
+             SET status = $1,
+                 rejection_reason = $2,
+                 reviewed_by = $3,
+                 reviewed_at = NOW(),
+                 user_id = $4,
+                 archived_at = CASE WHEN $1 IN ('approved','rejected') THEN COALESCE(archived_at, NOW()) ELSE NULL END,
+                 archived_by = CASE WHEN $1 IN ('approved','rejected') THEN COALESCE(archived_by, $3) ELSE NULL END
              WHERE id = $5`,
             [status, status === "rejected" ? rejectionReason : null, req.user.id, linkedUserId, id]
         );
