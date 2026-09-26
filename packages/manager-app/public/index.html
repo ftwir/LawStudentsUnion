@@ -40,26 +40,29 @@ const login=document.getElementById("login");
 const password=document.getElementById("password");
 const button=document.getElementById("loginButton");
 const status=document.getElementById("status");
+let token="";
 function message(text,ok){status.textContent=text;status.className=ok?"ok":"err";}
-async function request(path,credentials){
- const response=await fetch(path,{headers:{Authorization:"Basic "+credentials,Accept:"application/json"},cache:"no-store"});
+async function api(path,options){
+ const headers=Object.assign({"Accept":"application/json"},options&&options.headers||{});
+ if(token) headers.Authorization="Bearer "+token;
+ const response=await fetch(path,Object.assign({},options||{},{headers,cache:"no-store"}));
  const text=await response.text();
- let data;
- try{data=JSON.parse(text)}catch(e){throw new Error("الخادم أعاد استجابة غير صالحة: "+text.slice(0,120))}
- if(!response.ok)throw new Error(data.message||("HTTP "+response.status));
+ let data; try{data=JSON.parse(text)}catch(e){throw new Error("استجابة غير صالحة من الخادم: "+text.slice(0,120))}
+ if(!response.ok) throw new Error(data.message||("HTTP "+response.status));
  return data;
 }
 button.addEventListener("click",async function(){
- const user=login.value;
+ const identifier=login.value.trim();
  const pass=password.value;
- if(!user||!pass){message("أدخل معرف المالك وكلمة المرور.",false);return}
- const credentials=btoa(unescape(encodeURIComponent(user+":"+pass)));
- button.disabled=true;
- button.textContent="جارٍ التحقق...";
+ if(!identifier||!pass){message("أدخل معرف المالك وكلمة المرور.",false);return}
+ button.disabled=true;button.textContent="جارٍ تسجيل الدخول...";
  try{
-   const config=await request("/api/manager/config",credentials);
-   message("تم تسجيل الدخول بنجاح.\n"+JSON.stringify(config,null,2),true);
- }catch(e){message(e.message,false)}
+   const result=await api("/api/manager/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({identifier,password:pass})});
+   token=result.token;
+   password.value="";
+   const config=await api("/api/manager/config");
+   message("تم تسجيل الدخول بنجاح.\n"+JSON.stringify({user:result.user,config},null,2),true);
+ }catch(e){token="";message(e.message,false)}
  finally{button.disabled=false;button.textContent="تسجيل الدخول"}
 });
 })();
