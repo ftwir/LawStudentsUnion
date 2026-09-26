@@ -2085,20 +2085,6 @@ function throttle(fn,wait=100){
 
   setInterval(()=>{if(document.visibilityState==='visible')heartbeat();},30000);
   setInterval(()=>{if(document.visibilityState==='visible')updateNotificationDot();},30000);
-  setInterval(async ()=>{
-    if(document.visibilityState!=='visible'||!currentUser)return;
-    try{
-      await updateNotificationDot();
-      if(currentPageName==='chat'){
-        await loadConversations();
-        if(active) await openChat(Number(active.id),true);
-      }else if(currentPageName==='notifications'){
-        await page('notifications');
-      }else if(currentPageName==='applications' && ['admin','owner'].includes(role())){
-        await page('applications');
-      }
-    }catch(error){}
-  },5000);
 
   function setPageAddress(p, profileIdentifier=null){
     let target='#'+p;
@@ -2131,6 +2117,18 @@ function throttle(fn,wait=100){
     setPageAddress(p,profileIdentifier);
     return originalPage(p,profileIdentifier);
   };
+
+  setInterval(async ()=>{
+    if(document.visibilityState!=='visible'||!currentUser)return;
+    try{
+      await updateNotificationDot();
+      if(currentPageName==='notifications') await originalPage('notifications');
+      else if(currentPageName==='applications' && ['admin','owner'].includes(role())) await originalPage('applications');
+      else if(currentPageName==='announcements') await originalPage('announcements');
+      else if(currentPageName==='activities') await originalPage('activities');
+      else if(currentPageName==='schedule') await originalPage('schedule');
+    }catch(error){}
+  },10000);
 
   await handleHash();
   window.addEventListener('hashchange',handleHash);
