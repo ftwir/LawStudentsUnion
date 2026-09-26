@@ -1755,7 +1755,12 @@ function closeCreateChatModal(){const modal=document.querySelector('#chatModal')
 async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
 function openCreationHub(){
   if(!currentUser){ page('login'); return; }
-  const existing=document.querySelector('#creationHub');if(existing){existing.classList.toggle('open');return;}
+  const existing=document.querySelector('#creationHub');
+  if(existing){
+    existing.classList.toggle('open');
+    document.querySelector('.create-btn')?.classList.toggle('create-open', existing.classList.contains('open'));
+    return;
+  }
   const modal=document.createElement('div');
   modal.id='creationHub';
   modal.className='creation-hub';
@@ -1772,7 +1777,11 @@ function openCreationHub(){
     </div>
   </div>`;
   document.body.appendChild(modal);
-  const close=()=>{modal.classList.remove('open');setTimeout(()=>modal.remove(),180);};
+  const close=()=>{
+    modal.classList.remove('open');
+    document.querySelector('.create-btn')?.classList.remove('create-open');
+    setTimeout(()=>modal.remove(),180);
+  };
   modal.querySelector('.creation-hub-close').onclick=close;
   modal.onclick=e=>{if(e.target===modal)close();};
   modal.querySelectorAll('[data-create]').forEach(btn=>btn.onclick=async()=>{
@@ -1787,7 +1796,10 @@ function openCreationHub(){
       if(tab) tab.click();
     }
   });
-  requestAnimationFrame(()=>modal.classList.add('open'));
+  requestAnimationFrame(()=>{
+    modal.classList.add('open');
+    document.querySelector('.create-btn')?.classList.add('create-open');
+  });
 }
 
 function markNotificationsRead(){
