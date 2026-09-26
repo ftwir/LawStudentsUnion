@@ -1053,8 +1053,6 @@ app.get("/api/auth-test", (req, res) => {
     `);
 });
 
-require("./community")(app, pool, requireAuth, requireRoles, getAuthenticatedUser);
-
 async function initializeDatabase() {
     try {
         const schemaPath =
