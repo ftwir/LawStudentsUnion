@@ -117,6 +117,38 @@ ALTER TABLE registrations ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES use
 
 CREATE INDEX IF NOT EXISTS idx_registrations_status ON registrations(status);
 
+CREATE TABLE IF NOT EXISTS posts (
+    id BIGSERIAL PRIMARY KEY,
+    author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    section VARCHAR(40) NOT NULL DEFAULT 'community',
+    title VARCHAR(255),
+    body TEXT NOT NULL,
+    image_url TEXT,
+    is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS post_likes (
+    post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS post_comments (
+    id BIGSERIAL PRIMARY KEY,
+    post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_section_date ON posts(section, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_pinned ON posts(is_pinned, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at);
+
 CREATE TABLE IF NOT EXISTS conversations (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(150),
