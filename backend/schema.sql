@@ -211,3 +211,18 @@ CREATE INDEX IF NOT EXISTS idx_membership_activation_registration ON membership_
 CREATE INDEX IF NOT EXISTS idx_friendships_friend_status ON friendships(friend_id, status);
 CREATE INDEX IF NOT EXISTS idx_conversation_members_user ON conversation_members(user_id, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_date ON messages(conversation_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS polls (
+ id BIGSERIAL PRIMARY KEY,
+ author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ question TEXT NOT NULL,
+ options JSONB NOT NULL DEFAULT '[]'::jsonb,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS poll_votes (
+ poll_id BIGINT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+ user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ option_index INTEGER NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(poll_id,user_id)
+);
