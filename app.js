@@ -1950,8 +1950,53 @@ function bindGlobalControls(){
     if(currentUser){drawer(false);page('profile',currentUser.profile_slug||currentUser.id);}
   });
 }
+
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bindGlobalControls,{once:true});
 else bindGlobalControls();
+
+/* GLOBAL CLICK FALLBACK */
+(function installGlobalClickFallback(){
+  function clearHiddenLayers(){
+    const shade=document.querySelector('#shade');
+    if(shade && !shade.classList.contains('open')){
+      shade.style.display='none';
+      shade.style.pointerEvents='none';
+    }
+    document.querySelectorAll('.creation-hub:not(.open), .chat-modal[hidden]').forEach(el=>{
+      el.style.pointerEvents='none';
+    });
+  }
+  clearHiddenLayers();
+  document.addEventListener('click',function(event){
+    clearHiddenLayers();
+    const target=event.target.closest?.('button,[data-page]');
+    if(!target)return;
+    if(target.id==='menu'||target.id==='bottomMenu'){
+      event.preventDefault();
+      updateDrawer();
+      drawer(true);
+      return;
+    }
+    if(target.id==='close'){
+      event.preventDefault();
+      drawer(false);
+      return;
+    }
+    const p=target.dataset.page;
+    if(p){
+      event.preventDefault();
+      page(p);
+      return;
+    }
+    if(target.classList.contains('create-btn')){
+      event.preventDefault();
+      const hub=document.querySelector('#creationHub');
+      if(hub)hub.classList.add('open');
+      else if(typeof openCreationHub==='function')openCreationHub();
+    }
+  },true);
+})();
+
 
 /* =========================
    START
