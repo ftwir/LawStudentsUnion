@@ -1,117 +1,90 @@
-const express = require('express');
-const router = express.Router();
-const { GoogleGenAI } = require('@google/genai');
-const { Octokit } = require('@octokit/rest');
+const express = require("express");
+const crypto = require("crypto");
+const { GoogleGenAI } = require("@google/genai");
+const { Octokit } = require("@octokit/rest");
 
-// تهيئة Gemini API و Octokit
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+function createOwnerRouter(pool) {
+    const router = express.Router();
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
-const REPO_OWNER = 'ftwir';
-const REPO_NAME = 'LawStudentsUnion';
+    async function authenticateOwner(req, res, next) {
+        try {
+            const masterPasscode = process.env.OWNER_MASTER_PASSCODE;
+            const providedPasscode = req.headers["x-owner-master-passcode"] || req.headers["x-owner-passcode"] || req.body?.passcode || req.query?.passcode;
+            if (masterPasscode && providedPasscode === masterPasscode) return next();
 
-/**
- * Middleware: التحقق المرن من رمز الحماية للمالك
- */
-function authenticateOwner(req, res, next) {
-  const masterPasscode = process.env.OWNER_MASTER_PASSCODE || '123456';
-  
-  // استقبال الرمز من كل الطرق الممكنة (Headers أو Body أو Query)
-  const providedPasscode = 
-    req.headers['x-owner-passcode'] || 
-    req.body?.passcode || 
-    req.query?.passcode;
+            const authorization = req.headers.authorization || "";
+            if (!authorization.startsWith("Bearer ")) return res.status(401).json({ ok:false, message:"Owner authentication required." });
+            const token = authorization.slice(7).trim();
+            if (!token) return res.status(401).json({ ok:false, message:"Owner authentication required." });
 
-  if (providedPasscode && providedPasscode === masterPasscode) {
-    return next();
-  }
-
-  return res.status(401).json({
-    status: 'error',
-    message: 'Manager authentication required. يرجى كتابة رمز الحماية الصحيح.'
-  });
-}
-
-// تطبيق الحماية على جميع المسارات
-router.use(authenticateOwner);
-
-/**
- * 👑 POST /api/owner/ai-execute
- */
-router.post('/ai-execute', async (req, res) => {
-  const { command, filePath } = req.body;
-
-  if (!command || !filePath) {
-    return res.status(400).json({ error: 'يرجى تحديد الأمر ومسار الملف.' });
-  }
-
-  try {
-    const { data: fileData } = await octokit.repos.getContent({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      path: filePath,
-      ref: 'main',,
-    });
-
-    const currentCode = Buffer.from(fileData.content, 'base64').toString('utf-8');
-
-    const prompt = `
-You are the Executive Owner AI Architect for "Law Students Union".
-Target File: ${filePath}
-Current Code:
-${currentCode}
-
-Owner Command:
-${command}
-
-Return ONLY valid code without markdown or explanation.
-`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-      config: { temperature: 0.1 },
-    });
-
-    let updatedCode = response.text.trim();
-    if (updatedCode.startsWith('```')) {
-      updatedCode = updatedCode.replace(/^```[a-z]*\n/, '').replace(/\n```$/, '');
+            const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+            const result = await pool.query(
+                "SELECT u.id, u.role, u.is_active FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW() AND u.is_active=TRUE AND u.role='owner' LIMIT 1",
+                [tokenHash]
+            );
+            if (!result.rows.length) return res.status(401).json({ ok:false, message:"Valid owner session required." });
+            req.owner = result.rows[0];
+            next();
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ ok:false, message:"Owner authentication failed." });
+        }
     }
 
-    const commitMessage = `feat(acm-owner): ${command.slice(0, 50)}`;
-    const { data: commitResult } = await octokit.repos.createOrUpdateFileContents({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      path: filePath,
-      message: commitMessage,
-      content: Buffer.from(updatedCode).toString('base64'),
-      sha: fileData.sha,
-      branch: 'main',
+    router.use(authenticateOwner);
+
+    router.get("/status", async (req,res) => {
+        try {
+            const users = await pool.query("SELECT COUNT(*)::int AS count FROM users");
+            const sessions = await pool.query("SELECT COUNT(*)::int AS count FROM sessions WHERE expires_at>NOW()");
+            res.json({ ok:true, ownerId:req.owner?.id || null, database:"connected", metrics:{users:users.rows[0].count, activeSessions:sessions.rows[0].count} });
+        } catch(error) {
+            console.error(error);
+            res.status(500).json({ ok:false, message:"Could not read owner status." });
+        }
     });
 
-    res.json({
-      status: 'success',
-      message: 'تم تنفيذ التعديل بنجاح ورفعه على main.',
-      filePath,
-      commitSha: commitResult.commit.sha,
-      commitUrl: commitResult.commit.html_url,
+    router.get("/users", async (req,res) => {
+        try {
+            const result = await pool.query("SELECT id,full_name,student_id,email,phone,role,is_active,last_login,created_at FROM users ORDER BY id DESC LIMIT 500");
+            res.json({ok:true,users:result.rows});
+        } catch(error) {
+            console.error(error);
+            res.status(500).json({ok:false,message:"Could not read users."});
+        }
     });
-  } catch (error) {
-    res.status(500).json({ error: error.message || 'حدث خطأ أثناء معالجة الأمر.' });
-  }
-});
 
-/**
- * 📊 GET /api/owner/metrics
- */
-router.get('/metrics', (req, res) => {
-  res.json({
-    activeStudents: 142,
-    totalPosts: 389,
-    activeChats: 12,
-    systemStatus: 'Healthy (Render CD Active)',
-    lastDeploy: new Date().toISOString(),
-  });
-});
+    router.get("/audit", async (req,res) => {
+        try {
+            const result = await pool.query("SELECT * FROM audit_logs ORDER BY 1 DESC LIMIT 500");
+            res.json({ok:true,events:result.rows});
+        } catch(error) {
+            res.json({ok:true,events:[]});
+        }
+    });
 
-module.exports = router;
+    router.post("/ai-execute", async (req,res) => {
+        const {command,filePath}=req.body||{};
+        if(!command||!filePath) return res.status(400).json({ok:false,error:"Command and filePath are required."});
+        try {
+            const {data:fileData}=await octokit.repos.getContent({owner:"ftwir",repo:"LawStudentsUnion",path:filePath,ref:"main"});
+            if(Array.isArray(fileData)||!fileData.content) return res.status(400).json({ok:false,error:"Target is not a readable file."});
+            const currentCode=Buffer.from(fileData.content,"base64").toString("utf8");
+            const prompt="You are the Executive Owner AI Architect for Law Students Union.\nTarget File: "+filePath+"\nCurrent Code:\n"+currentCode+"\nOwner Command:\n"+command+"\nReturn ONLY valid code without markdown or explanation.";
+            const response=await ai.models.generateContent({model:"gemini-2.5-pro",contents:prompt,config:{temperature:0.1}});
+            let updatedCode=String(response.text||"").trim();
+            updatedCode=updatedCode.replace(/^\`\`\`[a-zA-Z0-9_-]*\s*/,"").replace(/\s*\`\`\`$/,"");
+            const commit=await octokit.repos.createOrUpdateFileContents({owner:"ftwir",repo:"LawStudentsUnion",path:filePath,message:"feat(acm-owner): "+String(command).slice(0,50),content:Buffer.from(updatedCode,"utf8").toString("base64"),sha:fileData.sha,branch:"main"});
+            res.json({ok:true,status:"success",message:"تم تنفيذ التعديل بنجاح ورفعه على main.",filePath,commitSha:commit.data.commit.sha,commitUrl:commit.data.commit.html_url});
+        } catch(error) {
+            console.error(error);
+            res.status(500).json({ok:false,error:error.message||"AI execution failed."});
+        }
+    });
+
+    return router;
+}
+
+module.exports={createOwnerRouter};
