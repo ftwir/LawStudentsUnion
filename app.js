@@ -496,276 +496,73 @@ function updateDrawer(){
    COMMUNITY HOME
 ========================= */
 
-async function renderHome(){
-
-  const announcements =
-    await getData(
-      'announcements',
-      demo.announcements
-    );
-
-  const activities =
-    await getData(
-      'activities',
-      demo.activities
-    );
-
-
-  app.innerHTML = `
-
-    <section class="community-cover"></section>
-
-    <section class="community-info">
-
-      <div class="community-avatar">
-        ⚖
-      </div>
-
-      <h1>
-        اتحاد طلبة كلية القانون
-      </h1>
-
-      <p>
-        المجتمع الطلابي للنقاش والتواصل
-        ومتابعة أخبار الاتحاد والأنشطة والفعاليات.
-      </p>
-
-      <div class="community-stats">
-
-        <div>
-          <strong>Community</strong>
-          <span>المجتمع الرسمي</span>
-        </div>
-
-        <div>
-          <strong>Public</strong>
-          <span>متاح للجميع</span>
-        </div>
-
-        <div>
-          <strong id="onlineCount">—</strong>
-          <span>متصل الآن</span>
-        </div>
-
-      </div>
-
-    </section>
-
-
-    <div class="community-tabs">
-
-      <button class="active">
-        الرئيسية
-      </button>
-
-      <button>
-        المنشورات
-      </button>
-
-      <button>
-        الأعضاء
-      </button>
-
-      <button>
-        الفعاليات
-      </button>
-
-    </div>
-
-
-    <div class="section-title">
-      <h2>استكشف المجتمع</h2>
-      <span>Community</span>
-    </div>
-
-
-    <div class="community-grid">
-
-      <div class="community-box"
-           data-page="announcements">
-
-        <div class="box-icon">📢</div>
-
-        <strong>الإعلانات</strong>
-
-        <span>
-          أخبار الاتحاد
-        </span>
-
-      </div>
-
-
-      <div class="community-box"
-           data-page="activities">
-
-        <div class="box-icon">🎓</div>
-
-        <strong>الفعاليات</strong>
-
-        <span>
-          الأنشطة والبرامج
-        </span>
-
-      </div>
-
-
-      <div class="community-box"
-           data-page="schedule">
-
-        <div class="box-icon">📚</div>
-
-        <strong>الدراسة</strong>
-
-        <span>
-          الجداول الدراسية
-        </span>
-
-      </div>
-
-
-      <div class="community-box"
-           data-page="registration">
-
-        <div class="box-icon">👥</div>
-
-        <strong>
-          ${currentUser ? 'المجتمع' : 'انضم للمجتمع'}
-        </strong>
-
-        <span>
-          ${currentUser
-            ? 'شارك كعضو'
-            : 'قدم طلب العضوية'}
-        </span>
-
-      </div>
-
-    </div>
-
-
-    <div class="section-title">
-      <h2>آخر المنشورات</h2>
-      <span>Feed</span>
-    </div>
-
-
-    <div class="feed">
-
-      ${announcements.slice(0,3).map(x => `
-
-        <article class="post">
-
-          <div class="post-head">
-
-            <div class="post-avatar">
-              ⚖
-            </div>
-
-            <div class="post-author">
-
-              <strong>
-                اتحاد طلبة كلية القانون
-              </strong>
-
-              <small>
-                ${escapeHTML(
-                  x.date ||
-                  x.published_at ||
-                  'اليوم'
-                )}
-              </small>
-
-            </div>
-
-          </div>
-
-          <div class="post-body">
-
-            <span class="tag">
-              ${escapeHTML(x.tag || 'عام')}
-            </span>
-
-            <h3>
-              ${escapeHTML(x.title)}
-            </h3>
-
-            <p>
-              ${escapeHTML(x.body)}
-            </p>
-
-          </div>
-
-          <div class="post-actions">
-
-            <button>
-              ♡ إعجاب
-            </button>
-
-            <button>
-              💬 تعليق
-            </button>
-
-            <button>
-              ↗ مشاركة
-            </button>
-
-          </div>
-
-        </article>
-
-      `).join('')}
-
-    </div>
-
-
-    <div class="section-title">
-      <h2>الفعاليات القادمة</h2>
-      <span>Events</span>
-    </div>
-
-
-    ${activities.slice(0,2).map(x => `
-
-      <article class="card">
-
-        <span class="tag">
-          ${escapeHTML(x.tag || 'فعالية')}
-        </span>
-
-        <h3>
-          ${escapeHTML(x.title)}
-        </h3>
-
-        <p>
-          ${escapeHTML(x.body)}
-        </p>
-
-      </article>
-
-    `).join('')}
-
-  `;
-
-
-  app
-    .querySelectorAll('[data-page]')
-    .forEach(button => {
-
-      button.onclick = () => {
-        page(button.dataset.page);
-      };
-
+async function fetchPosts(section){
+  const response=await fetch(API+'/api/posts?section='+encodeURIComponent(section||'community')+'&limit=30',{cache:'no-store'});
+  const result=await response.json();
+  if(!response.ok||!result.ok) throw new Error(result.message||'تعذر تحميل المنشورات.');
+  return result.posts||[];
+}
+
+function postHTML(post){
+  const avatar=post.author&&post.author.avatar_url?'<img src="'+escapeHTML(post.author.avatar_url)+'" alt="">':'👤';
+  const comments=(post.comments||[]).slice(-3).map(c=>'<div class="comment"><strong>'+escapeHTML(c.author?.full_name||'عضو')+'</strong><span>'+escapeHTML(c.body)+'</span></div>').join('');
+  const manager=['admin','owner'].includes(role());
+  const own=currentUser&&Number(currentUser.id)===Number(post.author?.id);
+  return '<article class="post" data-post-id="'+post.id+'">'+
+    '<div class="post-head"><button class="post-author-link" data-profile="'+escapeHTML(post.author?.profile_slug||post.author?.id||'')+'"><span class="post-avatar">'+avatar+'</span><span class="post-author"><strong>'+escapeHTML(post.author?.full_name||'عضو الاتحاد')+'</strong><small>'+escapeHTML(new Date(post.created_at).toLocaleString('ar-LY'))+'</small></span></button>'+(post.is_pinned?'<span class="tag">مثبت</span>':'')+'</div>'+
+    '<div class="post-body">'+(post.title?'<h3>'+escapeHTML(post.title)+'</h3>':'')+'<p>'+escapeHTML(post.body).replaceAll('\\n','<br>')+'</p>'+(post.image_url?'<img class="post-image" src="'+escapeHTML(post.image_url)+'" alt="صورة المنشور" loading="lazy">':'')+'</div>'+
+    '<div class="post-actions"><button data-action="like" class="'+(post.liked_by_me?'active':'')+'">♥ <span>'+post.likes_count+'</span></button><button data-action="focus-comment">💬 <span>'+post.comments_count+'</span></button><button data-action="share">↗ مشاركة</button>'+(manager?'<button data-action="pin">'+(post.is_pinned?'إلغاء التثبيت':'تثبيت')+'</button>':'')+((own||manager)?'<button data-action="delete">حذف</button>':'')+'</div>'+
+    '<div class="comments">'+comments+(currentUser?'<form class="comment-form"><input name="body" maxlength="2000" placeholder="اكتب تعليقاً..." required><button>إرسال</button></form>':'<small>سجل الدخول للتعليق والإعجاب.</small>')+'</div></article>';
+}
+
+async function refreshPostsIn(container,section){
+  if(!container)return;
+  try{
+    const posts=await fetchPosts(section);
+    container.innerHTML=posts.length?posts.map(postHTML).join(''):'<div class="empty">لا توجد منشورات هنا بعد. كن أول من يشارك.</div>';
+    bindPostEvents(container,section);
+  }catch(error){container.innerHTML='<div class="empty">'+escapeHTML(error.message)+'</div>';}
+}
+
+function bindPostEvents(container,section){
+  container.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>openProfile(b.dataset.profile));
+  container.querySelectorAll('.post').forEach(post=>{
+    const id=post.dataset.postId;
+    post.querySelector('[data-action="like"]')?.addEventListener('click',async()=>{
+      if(!currentUser){page('login');return;}
+      const r=await fetch(API+'/api/posts/'+id+'/like',{method:'POST',headers:{Authorization:'Bearer '+getToken()}});
+      const x=await r.json(); if(!r.ok||!x.ok){alert(x.message||'تعذر تحديث الإعجاب.');return;}
+      const b=post.querySelector('[data-action="like"]');b.classList.toggle('active',x.liked);b.querySelector('span').textContent=x.likes_count;
     });
+    post.querySelector('[data-action="focus-comment"]')?.addEventListener('click',()=>post.querySelector('.comment-form input')?.focus());
+    post.querySelector('[data-action="share"]')?.addEventListener('click',async()=>{
+      const url=location.origin+location.pathname+'#post/'+id;
+      try{if(navigator.share)await navigator.share({title:'اتحاد طلبة كلية القانون',text:'منشور من مجتمع الاتحاد',url});else{await navigator.clipboard.writeText(url);alert('تم نسخ رابط المنشور.');}}catch(e){}
+    });
+    post.querySelector('[data-action="pin"]')?.addEventListener('click',async()=>{
+      const pinned=!post.querySelector('[data-action="pin"]').textContent.includes('إلغاء');
+      const r=await fetch(API+'/api/posts/'+id+'/pin',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({pinned})});
+      const x=await r.json();if(!r.ok||!x.ok){alert(x.message||'تعذر تحديث التثبيت.');return;}await refreshPostsIn(container,section);
+    });
+    post.querySelector('[data-action="delete"]')?.addEventListener('click',async()=>{
+      if(!confirm('هل تريد حذف هذا المنشور؟'))return;
+      const r=await fetch(API+'/api/posts/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}});
+      const x=await r.json();if(!r.ok||!x.ok){alert(x.message||'تعذر حذف المنشور.');return;}await refreshPostsIn(container,section);
+    });
+    post.querySelector('.comment-form')?.addEventListener('submit',async e=>{
+      e.preventDefault();const input=e.currentTarget.elements.body;if(!input.value.trim())return;
+      const r=await fetch(API+'/api/posts/'+id+'/comments',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})});
+      const x=await r.json();if(!r.ok||!x.ok){alert(x.message||'تعذر إضافة التعليق.');return;}input.value='';await refreshPostsIn(container,section);
+    });
+  });
+}
 
-  const onlineCount = await getOnlineCount();
-  const onlineEl = document.querySelector('#onlineCount');
-  if(onlineEl) onlineEl.textContent = onlineCount;
-
-  setTimeout(async () => {
-    const count = await getOnlineCount();
-    const el = document.querySelector('#onlineCount');
-    if(el) el.textContent = count;
-  }, 30000);
+async function renderHome(){
+  app.innerHTML='<section class="community-cover"></section><section class="community-info"><div class="community-avatar">⚖</div><h1>اتحاد طلبة كلية القانون</h1><p>المجتمع الطلابي الرسمي للتواصل، الأخبار، الأنشطة والمناقشات بين طلبة كلية القانون.</p><div class="community-stats"><div><strong>Community</strong><span>المجتمع الرسمي</span></div><div><strong>Public</strong><span>متاح للجميع</span></div><div><strong id="onlineCount">—</strong><span>متصل الآن</span></div></div></section><div class="community-tabs"><button class="active" data-section="community">الرئيسية</button><button data-section="announcements">الإعلانات</button><button data-section="activities">الأنشطة</button><button data-section="study">الدراسة</button></div><div class="section-title"><h2>مساحات الاتحاد</h2><span>Sections</span></div><div class="community-grid"><div class="community-box" data-page="announcements"><div class="box-icon">📢</div><strong>الإعلانات</strong><span>أخبار الاتحاد والتنبيهات الرسمية</span></div><div class="community-box" data-page="activities"><div class="box-icon">🎓</div><strong>الأنشطة والفعاليات</strong><span>الندوات والبرامج والأنشطة</span></div><div class="community-box" data-page="schedule"><div class="box-icon">📚</div><strong>الدراسة</strong><span>الجداول والمعلومات الدراسية</span></div><div class="community-box" data-page="posts"><div class="box-icon">💬</div><strong>مجتمع الطلبة</strong><span>منشورات ومناقشات الأعضاء</span></div></div><div class="section-title"><h2>آخر منشورات المجتمع</h2><span>Community Feed</span></div><div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>';
+  app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
+  app.querySelectorAll('[data-section]').forEach(b=>b.onclick=async()=>{app.querySelectorAll('[data-section]').forEach(x=>x.classList.remove('active'));b.classList.add('active');await refreshPostsIn(document.querySelector('#homePosts'),b.dataset.section);});
+  const count=await getOnlineCount();const el=document.querySelector('#onlineCount');if(el)el.textContent=count;
+  await refreshPostsIn(document.querySelector('#homePosts'),'community');
 }
 
 
@@ -829,6 +626,20 @@ async function loadPublicProfile(identifier){
   return result.user;
 }
 
+async function renderPostsPage(){
+  app.innerHTML='<div class="section-title"><h2>منشورات المجتمع</h2><span>Community</span></div><div class="feed" id="postsPageFeed"><div class="empty">جارٍ تحميل المنشورات...</div></div>';
+  await refreshPostsIn(document.querySelector('#postsPageFeed'),'community');
+}
+
+async function renderCreatePost(){
+  if(!currentUser){page('login');return;}
+  app.innerHTML='<div class="section-title"><h2>إنشاء منشور</h2><span>Community</span></div><article class="card"><form class="form" id="createPostForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="announcements">الإعلانات</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>العنوان (اختياري)<input name="title" maxlength="255"></label><label>محتوى المنشور<textarea name="body" maxlength="10000" rows="7" required placeholder="شارك شيئاً مع مجتمع الاتحاد..."></textarea></label><label>صورة<input id="postImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><div id="postImagePreview"></div><button class="btn" id="publishPostButton">نشر المنشور</button><div id="postCreateStatus"></div></form></article>';
+  let imageData=null;
+  document.querySelector('#postImageInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('الصورة يجب ألا تتجاوز 5MB.');e.target.value='';return;}const reader=new FileReader();reader.onload=()=>{imageData=reader.result;document.querySelector('#postImagePreview').innerHTML='<img class="post-image" src="'+escapeHTML(imageData)+'" alt="معاينة الصورة">';};reader.readAsDataURL(file);};
+  document.querySelector('#createPostForm').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,data=Object.fromEntries(new FormData(form)),button=document.querySelector('#publishPostButton'),status=document.querySelector('#postCreateStatus');button.disabled=true;status.textContent='جارٍ نشر المنشور...';try{const r=await fetch(API+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({section:data.section,title:data.title,body:data.body,image_url:imageData})});const x=await r.json();if(!r.ok||!x.ok)throw new Error(x.message||'تعذر نشر المنشور.');page('posts');}catch(error){status.textContent=error.message;button.disabled=false;}};
+}
+
+
 /* =========================
    PAGE ROUTER
 ========================= */
@@ -856,6 +667,10 @@ async function page(p, profileIdentifier = null){
     return;
   }
 
+
+  if(p === 'create'){ await renderCreatePost(); return; }
+
+  if(p === 'posts'){ await renderPostsPage(); return; }
 
   if(p === 'login'){
 
