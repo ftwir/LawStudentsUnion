@@ -92,7 +92,7 @@
     box.textContent='JavaScript error: '+String(message||'Unknown error');
   }
   window.addEventListener('error',function(e){
-    if(e.error||e.message)showRuntimeError(e.message||(e.error&&e.error.message));
+    if(e.error||e.message)showRuntimeError((e.filename?e.filename+' ':'')+(e.lineno?('line '+e.lineno+', col '+e.colno+' '):'')+(e.message||(e.error&&e.error.message)));
   });
   window.addEventListener('unhandledrejection',function(e){
     const r=e.reason;
