@@ -1507,7 +1507,7 @@ async function page(p, profileIdentifier = null){
     app.innerHTML=`
       <div class="chat-app">
         <aside class="chat-list card">
-          <div class="chat-list-head"><h2>الدردشات</h2></div>
+          <div class="chat-list-head"><div><h2>الوارد</h2><small>رسائلك وقنوات الاتحاد</small></div><button id="chatNewButton" class="chat-new-btn" type="button" aria-label="إنشاء دردشة">＋</button></div>
           <input id="chatSearch" class="chat-search" placeholder="بحث...">
           <div id="chatList"><div class="empty">جارٍ التحميل...</div></div>
         </aside>
@@ -1548,11 +1548,35 @@ async function page(p, profileIdentifier = null){
       messages.scrollTop=messages.scrollHeight;
     }
     document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;if(!input.value.trim())return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';await openChat(active.id);await loadConversations();};
-    document.querySelector('#closeChatModal').onclick=closeCreateChatModal;document.querySelector('#chatModal').onclick=e=>{if(e.target.id==='chatModal')closeCreateChatModal();};
-     document.querySelector('#chatType').onchange=e=>{document.querySelector('#chatNameWrap').style.display=e.target.value==='direct'?'none':'block';document.querySelector('#chatModalTitle').textContent=e.target.value==='group'?'إنشاء مجموعة':e.target.value==='direct'?'محادثة خاصة':'إنشاء قناة عامة';};
+    document.querySelector('#closeChatModal').onclick=closeCreateChatModal;
+document.querySelector('#chatModal').onclick=e=>{if(e.target.id==='chatModal')closeCreateChatModal();};
+document.querySelector('#chatNewButton').onclick=()=>openCreateChatModal('direct');
+     document.querySelector('#chatType').onchange=e=>{
+      const type=e.target.value;
+      document.querySelector('#chatNameWrap').style.display=type==='direct'?'none':'block';
+      const memberLabel=document.querySelector('#chatMembersSearch').closest('label');
+      memberLabel.style.display=type==='public'?'none':'block';
+      document.querySelector('#chatUsers').style.display=type==='public'?'none':'grid';
+      document.querySelector('#chatModalTitle').textContent=type==='group'?'إنشاء مجموعة خاصة':type==='direct'?'محادثة خاصة':'إنشاء قناة عامة';
+      document.querySelector('#chatName').placeholder=type==='public'?'مثال: قناة الأنشطة':'اسم المجموعة';
+    };
     async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
     document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
-    document.querySelector('#createChatBtn').onclick=async()=>{const type=document.querySelector('#chatType').value;const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name:document.querySelector('#chatName').value.trim(),member_ids:selected})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إنشاء المحادثة.');return;}closeCreateChatModal();selected=[];await loadConversations();openChat(Number(xx.conversation.id));};
+    document.querySelector('#createChatBtn').onclick=async()=>{
+      const type=document.querySelector('#chatType').value;
+      const name=document.querySelector('#chatName').value.trim();
+      if(type==='direct' && selected.length!==1){alert('اختر عضواً واحداً لإنشاء محادثة خاصة.');return;}
+      if(type!=='direct' && !name){alert('اكتب اسم الدردشة أولاً.');return;}
+      if(type==='group' && selected.length<1){alert('اختر عضواً واحداً على الأقل للمجموعة.');return;}
+      const button=document.querySelector('#createChatBtn');button.disabled=true;button.textContent='جارٍ الإنشاء...';
+      try{
+        const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name,member_ids:selected})});
+        const xx=await rr.json();
+        if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر إنشاء المحادثة.');
+        closeCreateChatModal();selected=[];await loadConversations();await openChat(Number(xx.conversation.id));
+      }catch(error){alert(error.message);}
+      finally{button.disabled=false;button.textContent='إنشاء';}
+    };
     await loadConversations();
     chatPollTimer=setInterval(async()=>{try{await loadConversations();if(active)await openChat(active.id,true);}catch(e){}},1800);
     return;
