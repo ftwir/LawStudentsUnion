@@ -636,7 +636,7 @@ app.put("/api/profile", requireAuth(async (req, res) => {
             }
         }
 
-        if (email && !/^\\S+@\\S+\\.\\S+$/.test(email)) {
+        if (email && !/^\S+@\S+\.\S+$/.test(email)) {
             return res.status(400).json({
                 ok: false,
                 message: "Invalid email address."
@@ -904,6 +904,8 @@ app.get("/api/admin/audit-logs", requireRoles("admin", "owner"), async (req, res
         res.status(500).json({ ok: false, message: "Could not load audit logs." });
     }
 });
+
+require("./community")(app, pool, requireAuth, requireRoles, getAuthenticatedUser);
 
 app.get("/api/auth-test", (req, res) => {
     res.send(`
