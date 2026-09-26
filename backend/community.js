@@ -621,13 +621,13 @@ app.patch("/api/admin/registrations/:id", requireRoles("admin", "owner"), async 
 
         await pool.query(
             `UPDATE registrations
-             SET status = $1,
-                 rejection_reason = $2,
+             SET status = $1::varchar,
+                 rejection_reason = $2::text,
                  reviewed_by = $3,
                  reviewed_at = NOW(),
                  user_id = $4,
-                 archived_at = CASE WHEN $1 IN ('approved','rejected') THEN COALESCE(archived_at, NOW()) ELSE NULL END,
-                 archived_by = CASE WHEN $1 IN ('approved','rejected') THEN COALESCE(archived_by, $3) ELSE NULL END
+                 archived_at = CASE WHEN $1::varchar IN ('approved'::varchar, 'rejected'::varchar) THEN COALESCE(archived_at, NOW()) ELSE NULL END,
+                 archived_by = CASE WHEN $1::varchar IN ('approved'::varchar, 'rejected'::varchar) THEN COALESCE(archived_by, $3) ELSE NULL END
              WHERE id = $5`,
             [status, status === "rejected" ? rejectionReason : null, req.user.id, linkedUserId, id]
         );
