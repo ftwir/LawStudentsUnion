@@ -190,3 +190,9 @@ CREATE INDEX IF NOT EXISTS idx_notifications_date ON notifications(published_at 
 CREATE INDEX IF NOT EXISTS idx_announcements_date ON announcements(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_date ON audit_logs(created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS app_settings (key VARCHAR(120) PRIMARY KEY, value JSONB NOT NULL DEFAULT '{}'::jsonb, updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS user_notifications (id BIGSERIAL PRIMARY KEY, recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL, kind VARCHAR(40) NOT NULL, title VARCHAR(255) NOT NULL, body TEXT, source VARCHAR(30) NOT NULL DEFAULT 'member', reference_type VARCHAR(40), reference_id BIGINT, is_read BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_user_notifications_recipient ON user_notifications(recipient_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS friendships (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status VARCHAR(20) NOT NULL DEFAULT 'accepted', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (user_id, friend_id), CHECK (user_id <> friend_id));

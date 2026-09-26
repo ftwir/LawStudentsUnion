@@ -1252,3 +1252,26 @@ main{
 
 .success{display:block;color:#62d98b;font-size:12px;line-height:1.7;}
 .error{display:block;color:var(--danger);font-size:12px;line-height:1.7;}
+
+/* Modern community navigation refinement */
+.notification-button{position:relative;display:grid!important;place-items:center;}
+.bell-icon{width:17px;height:19px;display:block;position:relative;border:2px solid currentColor;border-radius:10px 10px 7px 7px;border-bottom-width:3px;}
+.bell-icon:before{content:"";position:absolute;left:4px;right:4px;bottom:-6px;height:3px;border-radius:50%;background:currentColor;}
+.bell-icon:after{content:"";position:absolute;left:6px;top:-5px;width:5px;height:5px;border-radius:50%;background:currentColor;}
+.notification-dot{position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;background:#ff4d67;border:2px solid var(--surface2);}
+.drawer-avatar{width:46px;height:46px;border-radius:15px;overflow:hidden;background:var(--surface3);display:grid;place-items:center;margin-left:10px;flex:0 0 46px;font-size:20px;}
+.drawer-avatar img{width:100%;height:100%;object-fit:cover;}
+.bottom-nav button{font-weight:600;}
+.community-tabs{position:sticky;top:64px;z-index:15;padding:7px 10px;background:rgba(16,17,22,.96);backdrop-filter:blur(14px);gap:3px;}
+.community-tabs button{font-size:11px;padding:8px 12px;border-radius:9px;}
+.home-welcome{margin:0 14px 6px;padding:18px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(145deg,var(--surface),var(--surface2));}
+.home-welcome h2{margin:0 0 6px;font-size:18px;}
+.home-welcome p{margin:0;color:var(--muted);font-size:12px;line-height:1.8;}
+.notification-list{padding:8px 14px;}
+.notification-card{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--line);}
+.notification-card:first-child{border-top:0;}
+.notification-card p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.7;}
+.notification-card small{color:var(--accent);white-space:nowrap;}
+.notification-settings{margin-top:12px;}
+.notification-settings .check-row{padding:12px 0;border-top:1px solid var(--line);}
+@media(max-width:699px){.topbar{height:60px}.community-tabs{top:60px}.bottom-nav{height:64px}.bottom-nav button span{font-size:18px}.community-cover{height:170px;}}
