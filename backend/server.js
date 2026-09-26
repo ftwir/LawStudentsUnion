@@ -998,12 +998,13 @@ require("./social")(app, pool, requireAuth);
 app.post("/api/polls", requireAuth(async (req,res)=>{
   const question=String(req.body.question||"").trim();
   const options=Array.isArray(req.body.options)?req.body.options.map(x=>String(x||"").trim()).filter(Boolean).slice(0,8):[];
+  const hashtags=[...new Set((Array.isArray(req.body.hashtags)?req.body.hashtags:[]).map(x=>String(x||"").trim().replace(/^#/,"").replace(/[^\p{L}\p{N}_-]/gu,"").slice(0,40)).filter(Boolean))].slice(0,12);
   if(question.length<2||options.length<2) return res.status(400).json({ok:false,message:"السؤال وخياران على الأقل مطلوبان."});
-  const r=await pool.query("INSERT INTO polls(author_id,question,options) VALUES($1,$2,$3::jsonb) RETURNING id,question,options,created_at",[req.user.id,question,JSON.stringify(options)]);
+  const r=await pool.query("INSERT INTO polls(author_id,question,options,hashtags) VALUES($1,$2,$3::jsonb,$4) RETURNING id,question,options,hashtags,created_at",[req.user.id,question,JSON.stringify(options),hashtags]);
   res.status(201).json({ok:true,poll:r.rows[0]});
 }));
 app.get("/api/polls", async (req,res)=>{
-  const r=await pool.query("SELECT p.id,p.question,p.options,p.created_at,u.full_name,u.avatar_url FROM polls p JOIN users u ON u.id=p.author_id ORDER BY p.created_at DESC LIMIT 50");
+  const r=await pool.query("SELECT p.id,p.question,p.options,p.hashtags,p.created_at,u.full_name,u.avatar_url FROM polls p JOIN users u ON u.id=p.author_id ORDER BY p.created_at DESC LIMIT 50");
   res.json({ok:true,polls:r.rows});
 });
 app.post("/api/polls/:id/vote", requireAuth(async (req,res)=>{
