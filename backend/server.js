@@ -622,7 +622,7 @@ app.put("/api/profile", requireAuth(async (req, res) => {
                     message: "Profile image is too large."
                 });
             }
-            if (!avatar_url.startsWith("data:image/") && !/^https?:\\/\\//i.test(avatar_url)) {
+            if (!avatar_url.startsWith("data:image/") && !avatar_url.startsWith("http://") && !avatar_url.startsWith("https://")) {
                 return res.status(400).json({
                     ok: false,
                     message: "Invalid profile image."
