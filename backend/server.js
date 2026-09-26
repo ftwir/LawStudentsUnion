@@ -1098,6 +1098,138 @@ app.post("/api/posts/:id/comments", requireAuth(async (req, res) => {
     }
 }));
 
+app.post("/api/posts/:id/report", requireAuth(async (req, res) => {
+    try {
+        const postId = Number(req.params.id);
+        const reason = String(req.body.reason || "").trim();
+
+        if (!Number.isInteger(postId) || !reason || reason.length > 500) {
+            return res.status(400).json({ ok: false, message: "Invalid report." });
+        }
+
+        const post = await pool.query(
+            `SELECT id, author_id FROM posts WHERE id = $1 AND is_published = TRUE LIMIT 1`,
+            [postId]
+        );
+
+        if (!post.rows.length) {
+            return res.status(404).json({ ok: false, message: "Post not found." });
+        }
+
+        const duplicate = await pool.query(
+            `SELECT id
+             FROM audit_logs
+             WHERE actor_user_id = $1
+               AND action = 'post.reported'
+               AND target_type = 'post'
+               AND target_id = $2
+               AND details->>'status' = 'open'
+             LIMIT 1`,
+            [req.user.id, postId]
+        );
+
+        if (duplicate.rows.length) {
+            return res.status(409).json({ ok: false, message: "You have already reported this post." });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+             VALUES ($1, 'post.reported', 'post', $2, $3::jsonb)
+             RETURNING id, created_at`,
+            [req.user.id, postId, JSON.stringify({ reason, status: "open" })]
+        );
+
+        res.status(201).json({
+            ok: true,
+            report: {
+                id: Number(result.rows[0].id),
+                post_id: postId,
+                status: "open",
+                created_at: result.rows[0].created_at
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not submit report." });
+    }
+}));
+
+app.get("/api/admin/reports", requireRoles("admin", "owner"), async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT a.id, a.target_id AS post_id, a.details, a.created_at,
+                   actor.full_name AS reporter_name,
+                   p.title AS post_title, p.body AS post_body,
+                   author.full_name AS author_name
+            FROM audit_logs a
+            LEFT JOIN users actor ON actor.id = a.actor_user_id
+            LEFT JOIN posts p ON p.id = a.target_id
+            LEFT JOIN users author ON author.id = p.author_id
+            WHERE a.action = 'post.reported'
+            ORDER BY a.created_at DESC
+            LIMIT 200
+        `);
+
+        const reports = result.rows.map(row => ({
+            id: Number(row.id),
+            post_id: Number(row.post_id),
+            reason: row.details?.reason || "",
+            status: row.details?.status || "open",
+            reporter_name: row.reporter_name || "عضو",
+            post_title: row.post_title,
+            post_body: row.post_body,
+            author_name: row.author_name || "عضو",
+            created_at: row.created_at
+        }));
+
+        res.json({ ok: true, reports });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load reports." });
+    }
+}));
+
+app.patch("/api/admin/reports/:id", requireRoles("admin", "owner"), async (req, res) => {
+    try {
+        const reportId = Number(req.params.id);
+        const status = String(req.body.status || "");
+
+        if (!Number.isInteger(reportId) || !["open", "resolved", "dismissed"].includes(status)) {
+            return res.status(400).json({ ok: false, message: "Invalid report status." });
+        }
+
+        const report = await pool.query(
+            `SELECT id, target_id, details
+             FROM audit_logs
+             WHERE id = $1 AND action = 'post.reported'
+             LIMIT 1`,
+            [reportId]
+        );
+
+        if (!report.rows.length) {
+            return res.status(404).json({ ok: false, message: "Report not found." });
+        }
+
+        await pool.query(
+            `UPDATE audit_logs
+             SET details = details || $1::jsonb
+             WHERE id = $2`,
+            [JSON.stringify({ status }), reportId]
+        );
+
+        await pool.query(
+            `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+             VALUES ($1, 'post.report_status_changed', 'report', $2, $3::jsonb)`,
+            [req.user.id, reportId, JSON.stringify({ status, post_id: report.rows[0].target_id })]
+        );
+
+        res.json({ ok: true, status });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not update report." });
+    }
+}));
+
 app.patch("/api/posts/:id/pin", requireRoles("admin", "owner"), async (req, res) => {
     try {
         const postId = Number(req.params.id);
