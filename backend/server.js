@@ -996,25 +996,93 @@ require("./social")(app, pool, requireAuth);
 
 
 app.post("/api/polls", requireAuth(async (req,res)=>{
-  const question=String(req.body.question||"").trim();
-  const options=Array.isArray(req.body.options)?req.body.options.map(x=>String(x||"").trim()).filter(Boolean).slice(0,8):[];
-  const hashtags=[...new Set((Array.isArray(req.body.hashtags)?req.body.hashtags:[]).map(x=>String(x||"").trim().replace(/^#/,"").replace(/[^\p{L}\p{N}_-]/gu,"").slice(0,40)).filter(Boolean))].slice(0,12);
-  if(question.length<2||options.length<2) return res.status(400).json({ok:false,message:"السؤال وخياران على الأقل مطلوبان."});
-  const r=await pool.query("INSERT INTO polls(author_id,question,options,hashtags) VALUES($1,$2,$3::jsonb,$4) RETURNING id,question,options,hashtags,created_at",[req.user.id,question,JSON.stringify(options),hashtags]);
-  res.status(201).json({ok:true,poll:r.rows[0]});
+  try{
+    const question=String(req.body.question||"").trim();
+    const options=Array.isArray(req.body.options)?req.body.options.map(x=>String(x||"").trim()).filter(Boolean).slice(0,12):[];
+    const hashtags=Array.isArray(req.body.hashtags)?req.body.hashtags.map(x=>String(x||"").replace(/^#/,"").trim()).filter(Boolean).slice(0,12):[];
+    const duration=Number(req.body.duration_minutes);
+    const durationMinutes=Number.isInteger(duration)&&duration>=5&&duration<=43200?duration:1440;
+    const allowVoteChange=req.body.allow_vote_change!==false;
+    const anonymous=req.body.anonymous===true;
+    const visibility=["always","after_vote","after_close","never"].includes(String(req.body.results_visibility||"after_vote"))?String(req.body.results_visibility||"after_vote"):"after_vote";
+    if(question.length<2||question.length>1000||options.length<2) return res.status(400).json({ok:false,message:"السؤال وخياران على الأقل مطلوبان."});
+    if(options.some(x=>x.length>300)) return res.status(400).json({ok:false,message:"أحد خيارات التصويت طويل أكثر من المسموح."});
+    const r=await pool.query(
+      `INSERT INTO polls(author_id,question,options,hashtags,duration_minutes,closes_at,allow_vote_change,anonymous,results_visibility)
+       VALUES($1,$2,$3::jsonb,$4,$5,NOW()+($5 * INTERVAL '1 minute'),$6,$7,$8)
+       RETURNING id,question,options,hashtags,duration_minutes,closes_at,allow_vote_change,anonymous,results_visibility,created_at`,
+      [req.user.id,question,JSON.stringify(options),hashtags,durationMinutes,allowVoteChange,anonymous,visibility]
+    );
+    await pool.query(
+      `INSERT INTO audit_logs(actor_user_id,action,target_type,target_id,details)
+       VALUES($1,'poll.created','poll',$2,$3::jsonb)`,
+      [req.user.id,r.rows[0].id,JSON.stringify({duration_minutes:durationMinutes,options_count:options.length,hashtags})]
+    );
+    res.status(201).json({ok:true,message:"تم نشر الاستفتاء بنجاح.",poll:{...r.rows[0],id:Number(r.rows[0].id)}});
+  }catch(error){
+    console.error(error);
+    res.status(500).json({ok:false,message:"تعذر نشر الاستفتاء."});
+  }
 }));
+
 app.get("/api/polls", async (req,res)=>{
-  const r=await pool.query("SELECT p.id,p.question,p.options,p.hashtags,p.created_at,u.full_name,u.avatar_url FROM polls p JOIN users u ON u.id=p.author_id ORDER BY p.created_at DESC LIMIT 50");
-  res.json({ok:true,polls:r.rows});
+  try{
+    const viewer=await getAuthenticatedUser(req);
+    const r=await pool.query(
+      `SELECT p.id,p.question,p.options,p.hashtags,p.duration_minutes,p.closes_at,p.allow_vote_change,p.anonymous,p.results_visibility,p.created_at,
+              u.id AS author_id,u.full_name AS author_name,u.avatar_url AS author_avatar,
+              COALESCE((SELECT COUNT(*)::int FROM poll_votes v WHERE v.poll_id=p.id),0) AS total_votes,
+              (SELECT v.option_index FROM poll_votes v WHERE v.poll_id=p.id AND v.user_id=$1 LIMIT 1) AS my_vote
+       FROM polls p
+       JOIN users u ON u.id=p.author_id
+       ORDER BY p.created_at DESC
+       LIMIT 100`,
+      [viewer?.id||null]
+    );
+    const polls=[];
+    for(const row of r.rows){
+      const counts=await pool.query(`SELECT option_index,COUNT(*)::int AS count FROM poll_votes WHERE poll_id=$1 GROUP BY option_index ORDER BY option_index`,[row.id]);
+      const total=Number(row.total_votes||0);
+      const closed=row.closes_at ? new Date(row.closes_at).getTime()<=Date.now() : false;
+      const canSeeResults=String(row.results_visibility)==="always" || closed || (String(row.results_visibility)==="after_vote" && row.my_vote!==null && row.my_vote!==undefined);
+      polls.push({
+        id:Number(row.id),question:row.question,options:row.options||[],hashtags:row.hashtags||[],duration_minutes:Number(row.duration_minutes||1440),
+        closes_at:row.closes_at,allow_vote_change:row.allow_vote_change,anonymous:row.anonymous,results_visibility:row.results_visibility,created_at:row.created_at,
+        author:{id:Number(row.author_id),full_name:row.author_name,avatar_url:row.author_avatar},
+        total_votes:total,my_vote:row.my_vote===null||row.my_vote===undefined?null:Number(row.my_vote),closed,
+        results:canSeeResults?counts.rows.map(x=>({option_index:Number(x.option_index),count:Number(x.count),percentage:total?Math.round(Number(x.count)*1000/total)/10:0})):null
+      });
+    }
+    res.json({ok:true,polls});
+  }catch(error){
+    console.error(error);
+    res.status(500).json({ok:false,message:"تعذر تحميل الاستفتاءات."});
+  }
 });
+
 app.post("/api/polls/:id/vote", requireAuth(async (req,res)=>{
-  const id=Number(req.params.id), option=Number(req.body.option_index);
-  if(!Number.isInteger(id)||!Number.isInteger(option)) return res.status(400).json({ok:false,message:"تصويت غير صالح."});
-  const p=await pool.query("SELECT options FROM polls WHERE id=$1",[id]);
-  if(!p.rows.length||option<0||option>=p.rows[0].options.length) return res.status(404).json({ok:false,message:"الخيار غير موجود."});
-  await pool.query("INSERT INTO poll_votes(poll_id,user_id,option_index) VALUES($1,$2,$3) ON CONFLICT(poll_id,user_id) DO UPDATE SET option_index=EXCLUDED.option_index",[id,req.user.id,option]);
-  res.json({ok:true});
+  try{
+    const id=Number(req.params.id), option=Number(req.body.option_index);
+    if(!Number.isInteger(id)||!Number.isInteger(option)) return res.status(400).json({ok:false,message:"تصويت غير صالح."});
+    const p=await pool.query("SELECT * FROM polls WHERE id=$1",[id]);
+    if(!p.rows.length) return res.status(404).json({ok:false,message:"الاستفتاء غير موجود."});
+    const poll=p.rows[0];
+    if(poll.closes_at && new Date(poll.closes_at).getTime()<=Date.now()) return res.status(409).json({ok:false,message:"انتهت مدة التصويت."});
+    if(option<0||option>=poll.options.length) return res.status(400).json({ok:false,message:"الخيار غير موجود."});
+    const existing=await pool.query("SELECT option_index FROM poll_votes WHERE poll_id=$1 AND user_id=$2",[id,req.user.id]);
+    if(existing.rows.length && !poll.allow_vote_change) return res.status(409).json({ok:false,message:"لا يمكن تغيير التصويت في هذا الاستفتاء."});
+    await pool.query(
+      `INSERT INTO poll_votes(poll_id,user_id,option_index) VALUES($1,$2,$3)
+       ON CONFLICT(poll_id,user_id) DO UPDATE SET option_index=EXCLUDED.option_index,created_at=NOW()`,
+      [id,req.user.id,option]
+    );
+    res.json({ok:true,message:"تم تسجيل تصويتك."});
+  }catch(error){
+    console.error(error);
+    res.status(500).json({ok:false,message:"تعذر تسجيل التصويت."});
+  }
 }));
+
 app.patch("/api/user-notifications/:id/read", requireAuth(async (req,res)=>{
     const id=Number(req.params.id);
     if(!Number.isInteger(id)) return res.status(400).json({ok:false,message:"Invalid notification."});
@@ -1206,6 +1274,31 @@ app.get("/api/auth-test", (req, res) => {
 </html>
     `);
 });
+
+
+async function processExpiredPolls(){
+  try{
+    const expired=await pool.query(
+      `UPDATE polls SET expiration_notified_at=NOW()
+       WHERE closes_at IS NOT NULL AND closes_at<=NOW() AND expiration_notified_at IS NULL
+       RETURNING id,question,author_id`
+    );
+    for(const poll of expired.rows){
+      const voters=await pool.query("SELECT DISTINCT user_id FROM poll_votes WHERE poll_id=$1",[poll.id]);
+      const recipients=new Set(voters.rows.map(x=>Number(x.user_id)));
+      recipients.add(Number(poll.author_id));
+      for(const recipientId of recipients){
+        await pool.query(
+          `INSERT INTO user_notifications(recipient_id,actor_id,kind,title,body,source,reference_type,reference_id)
+           VALUES($1,$2,'poll_ended',$3,$4,'poll','poll',$5)`,
+          [recipientId,poll.author_id,"انتهى التصويت","انتهت مدة الاستفتاء: "+String(poll.question).slice(0,180),poll.id]
+        );
+      }
+    }
+  }catch(error){ console.error("Expired poll processing failed:",error); }
+}
+setInterval(processExpiredPolls,60000);
+processExpiredPolls();
 
 async function initializeDatabase() {
     try {
