@@ -1802,3 +1802,254 @@ document
   });
 
 })();
+
+
+/* =========================
+   INTERACTIVE COMMUNITY V2
+========================= */
+
+async function apiV2(path, options) {
+  options = options || {};
+  var headers = options.headers || {};
+  var token = getToken();
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  if (token) headers.Authorization = 'Bearer ' + token;
+  var response = await fetch(API + path, Object.assign({}, options, {headers: headers, cache: 'no-store'}));
+  var data = {};
+  try { data = await response.json(); } catch(e) {}
+  if (!response.ok || data.ok === false) throw new Error(data.message || 'تعذر تنفيذ العملية.');
+  return data;
+}
+
+function v2Date(value) {
+  try { return new Date(value).toLocaleString('ar-LY', {dateStyle:'medium', timeStyle:'short'}); }
+  catch(e) { return 'الآن'; }
+}
+
+async function v2Posts(section) {
+  try {
+    var data = await apiV2('/api/posts?section=' + encodeURIComponent(section));
+    return data.posts || [];
+  } catch(e) {
+    return [];
+  }
+}
+
+function v2PostCard(post) {
+  var admin = role() === 'admin' || role() === 'owner';
+  var mine = currentUser && Number(post.author_id) === Number(currentUser.id);
+  var avatar = post.author_avatar
+    ? '<img src="' + escapeHTML(post.author_avatar) + '" alt="">'
+    : '⚖';
+  return [
+    '<article class="post interactive-post" data-post="' + escapeHTML(post.id) + '">',
+      '<div class="post-head">',
+        '<button class="post-avatar-btn" data-profile-id="' + escapeHTML(post.author_id || '') + '">' + avatar + '</button>',
+        '<div class="post-author"><strong>' + escapeHTML(post.author_name || 'عضو الاتحاد') + '</strong><small>' + v2Date(post.created_at) + '</small></div>',
+        post.is_pinned ? '<span class="pin-badge">📌 مثبت</span>' : '',
+      '</div>',
+      '<div class="post-body">',
+        post.title ? '<h3>' + escapeHTML(post.title) + '</h3>' : '',
+        '<p>' + escapeHTML(post.body || '').replaceAll('\n','<br>') + '</p>',
+        post.image_url ? '<img class="post-image" src="' + escapeHTML(post.image_url) + '" alt="صورة المنشور">' : '',
+      '</div>',
+      '<div class="post-actions">',
+        '<button class="v2-like ' + (post.liked ? 'liked' : '') + '" data-like-id="' + escapeHTML(post.id) + '">♡ <span>' + (post.likes_count || 0) + '</span> إعجاب</button>',
+        '<button data-comment-id="' + escapeHTML(post.id) + '">💬 <span>' + (post.comments_count || 0) + '</span> تعليق</button>',
+        admin ? '<button data-pin-id="' + escapeHTML(post.id) + '">' + (post.is_pinned ? '📌 إلغاء التثبيت' : '📌 تثبيت') + '</button>' : '',
+        (mine || admin) ? '<button data-delete-id="' + escapeHTML(post.id) + '">🗑 حذف</button>' : '',
+      '</div>',
+      '<div class="comments-panel" id="comments-' + escapeHTML(post.id) + '"></div>',
+    '</article>'
+  ].join('');
+}
+
+async function bindV2Posts() {
+  document.querySelectorAll('[data-profile-id]').forEach(function(button) {
+    button.onclick = function() { page('profile', button.dataset.profileId); };
+  });
+
+  document.querySelectorAll('[data-like-id]').forEach(function(button) {
+    button.onclick = async function() {
+      if (!currentUser) return page('login');
+      try {
+        var result = await apiV2('/api/posts/' + button.dataset.likeId + '/like', {method:'POST'});
+        button.classList.toggle('liked', result.liked);
+        button.querySelector('span').textContent = result.likes_count;
+      } catch(e) { alert(e.message); }
+    };
+  });
+
+  document.querySelectorAll('[data-comment-id]').forEach(function(button) {
+    button.onclick = async function() {
+      var id = button.dataset.commentId;
+      var box = document.querySelector('#comments-' + id);
+      if (box.innerHTML) { box.innerHTML = ''; return; }
+      try {
+        var result = await apiV2('/api/posts/' + id + '/comments');
+        var comments = result.comments || [];
+        box.innerHTML =
+          '<div class="comments-list">' +
+          comments.map(function(c) {
+            return '<div class="comment"><b>' + escapeHTML(c.author_name) + '</b><span>' + escapeHTML(c.body) + '</span><small>' + v2Date(c.created_at) + '</small></div>';
+          }).join('') +
+          '</div>' +
+          (currentUser
+            ? '<form class="comment-form" data-comment-form="' + id + '"><input name="body" required placeholder="اكتب تعليقاً..."><button>إرسال</button></form>'
+            : '<div class="comment-login">سجّل الدخول للتعليق.</div>');
+        var form = box.querySelector('[data-comment-form]');
+        if (form) form.onsubmit = async function(event) {
+          event.preventDefault();
+          var body = new FormData(form).get('body');
+          try {
+            await apiV2('/api/posts/' + id + '/comments', {method:'POST', body:JSON.stringify({body:body})});
+            box.innerHTML = '';
+            button.click();
+          } catch(e) { alert(e.message); }
+        };
+      } catch(e) { box.textContent = e.message; }
+    };
+  });
+
+  document.querySelectorAll('[data-pin-id]').forEach(function(button) {
+    button.onclick = async function() {
+      try {
+        await apiV2('/api/posts/' + button.dataset.pinId + '/pin', {
+          method:'PATCH',
+          body:JSON.stringify({pinned: button.textContent.indexOf('إلغاء') === -1})
+        });
+        page(location.hash === '#announcements' ? 'announcements' : location.hash === '#activities' ? 'activities' : 'home');
+      } catch(e) { alert(e.message); }
+    };
+  });
+
+  document.querySelectorAll('[data-delete-id]').forEach(function(button) {
+    button.onclick = async function() {
+      if (!confirm('هل تريد حذف هذا المنشور؟')) return;
+      try {
+        await apiV2('/api/posts/' + button.dataset.deleteId, {method:'DELETE'});
+        page(location.hash === '#announcements' ? 'announcements' : location.hash === '#activities' ? 'activities' : 'home');
+      } catch(e) { alert(e.message); }
+    };
+  });
+}
+
+async function renderV2Section(section, title, subtitle, icon, description) {
+  var posts = await v2Posts(section);
+  app.innerHTML =
+    '<div class="page-shell page-' + section + '">' +
+      '<div class="page-hero"><div class="page-icon">' + icon + '</div><div><span>' + subtitle + '</span><h1>' + title + '</h1><p>' + description + '</p></div></div>' +
+      '<div class="section-title"><h2>منشورات الصفحة</h2><span>' + posts.length + ' منشور</span></div>' +
+      '<div class="feed">' + (posts.length ? posts.map(v2PostCard).join('') : '<div class="empty">لا توجد منشورات بعد.</div>') + '</div>' +
+    '</div>';
+  await bindV2Posts();
+}
+
+async function renderV2Create() {
+  if (!currentUser) return renderMembership();
+  var manager = role() === 'admin' || role() === 'owner';
+  app.innerHTML =
+    '<div class="page-shell page-create">' +
+      '<div class="composer-hero"><div class="page-icon">✦</div><h1>إنشاء منشور</h1><p>شارك أفكارك ومعلوماتك مع الطلبة.</p></div>' +
+      '<form class="card form" id="v2PostForm">' +
+        '<label>القسم<select name="section"><option value="community">المجتمع</option>' +
+          (manager ? '<option value="announcements">الإعلانات</option><option value="activities">الفعاليات</option>' : '') +
+        '</select></label>' +
+        '<label>العنوان<input name="title" maxlength="255" placeholder="عنوان اختياري"></label>' +
+        '<label>المحتوى<textarea name="body" maxlength="5000" required placeholder="اكتب منشورك هنا..."></textarea></label>' +
+        '<label>إرفاق صورة<input id="v2PostImage" type="file" accept="image/*"><div id="v2PostPreview" class="upload-preview">اضغط لاختيار صورة</div></label>' +
+        '<button class="btn" id="v2PostButton">نشر المنشور</button><div id="v2PostStatus"></div>' +
+      '</form>' +
+    '</div>';
+
+  var imageData = null;
+  document.querySelector('#v2PostImage').onchange = function(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (file.size > 2200000) { alert('الصورة كبيرة جداً. الحد 2.2MB.'); event.target.value=''; return; }
+    var reader = new FileReader();
+    reader.onload = function() {
+      imageData = reader.result;
+      document.querySelector('#v2PostPreview').innerHTML = '<img src="' + escapeHTML(imageData) + '">';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  document.querySelector('#v2PostForm').onsubmit = async function(event) {
+    event.preventDefault();
+    var data = Object.fromEntries(new FormData(event.currentTarget));
+    var status = document.querySelector('#v2PostStatus');
+    var button = document.querySelector('#v2PostButton');
+    button.disabled = true;
+    status.textContent = 'جارٍ النشر...';
+    try {
+      await apiV2('/api/posts', {method:'POST', body:JSON.stringify({
+        section:data.section, title:data.title, body:data.body, image_url:imageData
+      })});
+      status.textContent = 'تم نشر المنشور بنجاح.';
+      setTimeout(function(){ page(data.section === 'community' ? 'home' : data.section); }, 500);
+    } catch(e) {
+      status.textContent = e.message;
+      button.disabled = false;
+    }
+  };
+}
+
+/*
+  Replace the old router with a page-specific interactive router.
+*/
+async function page(p, profileIdentifier) {
+  document.querySelectorAll('[data-page]').forEach(function(x) {
+    x.classList.toggle('active', x.dataset.page === p);
+  });
+
+  if (p === 'create') return renderV2Create();
+  if (p === 'home') {
+    var communityPosts = await v2Posts('community');
+    var online = await getOnlineCount();
+    app.innerHTML =
+      '<div class="home-page">' +
+        '<section class="community-cover"></section>' +
+        '<section class="community-info"><div class="community-avatar">⚖</div><h1>اتحاد طلبة كلية القانون</h1><p>المجتمع الطلابي الرسمي للتواصل والنشر ومتابعة الأخبار والأنشطة.</p>' +
+        '<div class="community-stats"><div><strong>Public</strong><span>مجتمع مفتوح</span></div><div><strong>' + online + '</strong><span>متصل الآن</span></div><div><strong>' + communityPosts.length + '</strong><span>منشور</span></div></div></section>' +
+        '<div class="community-tabs"><button class="active">الرئيسية</button><button data-page="announcements">الإعلانات</button><button data-page="activities">الفعاليات</button><button data-page="schedule">الدراسة</button></div>' +
+        '<div class="section-title"><h2>مساحات المجتمع</h2><span>Explore</span></div>' +
+        '<div class="community-grid">' +
+          '<div class="community-box" data-page="announcements"><div class="box-icon">📢</div><strong>الإعلانات</strong><span>الأخبار الرسمية</span></div>' +
+          '<div class="community-box" data-page="activities"><div class="box-icon">🎓</div><strong>الفعاليات</strong><span>البرامج والأنشطة</span></div>' +
+          '<div class="community-box" data-page="schedule"><div class="box-icon">📚</div><strong>الدراسة</strong><span>الجداول والمواعيد</span></div>' +
+          '<div class="community-box" data-page="create"><div class="box-icon">' + (currentUser?'✚':'👥') + '</div><strong>' + (currentUser?'اكتب منشوراً':'انضم للمجتمع') + '</strong><span>' + (currentUser?'شارك أفكارك':'طلب العضوية') + '</span></div>' +
+        '</div>' +
+        '<div class="section-title"><h2>أحدث منشورات المجتمع</h2><span>Feed</span></div>' +
+        '<div class="feed">' + (communityPosts.slice(0,8).map(v2PostCard).join('') || '<div class="empty">لا توجد منشورات بعد.</div>') + '</div>' +
+      '</div>';
+    app.querySelectorAll('[data-page]').forEach(function(b){b.onclick=function(){page(b.dataset.page);};});
+    await bindV2Posts();
+    return;
+  }
+  if (p === 'announcements') return renderV2Section('announcements','الإعلانات','Official','📢','مساحة مستقلة للإعلانات الرسمية والمستجدات المهمة.');
+  if (p === 'activities') return renderV2Section('activities','الأنشطة والفعاليات','Events','🎓','مساحة مستقلة للندوات والمسابقات والبرامج والفعاليات.');
+  if (p === 'profile') {
+    if (!currentUser) return page('login');
+    return renderProfile(profileIdentifier || currentUser.profile_slug || currentUser.id);
+  }
+  if (p === 'login') return renderLogin();
+  if (p === 'registration') return renderMembership();
+  if (p === 'schedule') return renderSchedule();
+  if (p === 'notifications') return renderNotifications();
+  if (['chat'].includes(p)) {
+    if (!currentUser) return page('login');
+    app.innerHTML = '<div class="page-shell page-chat"><div class="page-hero"><div class="page-icon">💬</div><div><span>Members</span><h1>الدردشة</h1><p>مساحة المحادثات للأعضاء.</p></div></div><div class="empty">ستُربط غرف الدردشة بالرسائل في المرحلة التالية.</div></div>';
+    return;
+  }
+  if (['admin','members','applications','content','reports'].includes(p) && !['admin','owner'].includes(role())) return page('home');
+  if (['owner','admins','users','private-chats','logs','settings'].includes(p) && role() !== 'owner') return page('home');
+  if (['admin','members','applications','content','reports','owner','admins','users','private-chats','logs','settings'].includes(p)) return renderManagement(p);
+  if (p === 'about') {
+    app.innerHTML = '<div class="page-shell"><div class="page-hero"><div class="page-icon">⚖</div><div><span>Community</span><h1>عن المجتمع</h1><p>اتحاد طلبة كلية القانون.</p></div></div><article class="card"><p>منصة طلابية للنشر والتواصل ومتابعة الأخبار والأنشطة والفعاليات.</p></article></div>';
+    return;
+  }
+  return page('home');
+}
+
+/* The + button is now context-aware: guests see membership, signed-in users create posts. */
