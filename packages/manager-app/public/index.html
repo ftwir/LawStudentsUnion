@@ -53,7 +53,9 @@ form.addEventListener("submit",async event=>{
   if(!response.ok||!data.ok)throw new Error(data.message||"بيانات الدخول غير صحيحة.");
   sessionStorage.setItem("acm_owner_token",data.token);
   message.className="success";message.textContent="تم التحقق من حساب المالك بنجاح. جارٍ فتح لوحة التحكم...";
-  window.location.href="/?owner="+encodeURIComponent(data.token);
+  message.className="success";
+  message.textContent="تم التحقق من حساب المالك بنجاح. جلسة المالك محفوظة في هذه الصفحة. يمكنك متابعة لوحة التحكم.";
+  form.style.display="none";
  }catch(error){message.className="error";message.textContent=error.message}
  finally{submit.disabled=false;submit.textContent="تسجيل الدخول"}
 });
