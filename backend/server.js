@@ -1277,6 +1277,177 @@ app.delete("/api/posts/:id", requireAuth(async (req, res) => {
     }
 }));
 
+app.get("/api/announcements", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, title, body, tag, is_published, published_at
+             FROM announcements
+             WHERE is_published = TRUE
+             ORDER BY published_at DESC, id DESC
+             LIMIT 100`
+        );
+        res.json({ ok: true, announcements: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load announcements." });
+    }
+}));
+
+app.get("/api/activities", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, title, body, tag, event_date, is_published
+             FROM activities
+             WHERE is_published = TRUE
+             ORDER BY event_date ASC NULLS LAST, id DESC
+             LIMIT 100`
+        );
+        res.json({ ok: true, activities: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load activities." });
+    }
+}));
+
+app.get("/api/notifications", requireAuth(async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, title, body, is_published, published_at
+             FROM notifications
+             WHERE is_published = TRUE
+             ORDER BY published_at DESC, id DESC
+             LIMIT 100`
+        );
+        res.json({ ok: true, notifications: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load notifications." });
+    }
+}));
+
+app.get("/api/schedule", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, title, body, day_name, start_time, end_time, room
+             FROM schedules
+             WHERE is_published = TRUE
+             ORDER BY day_name, start_time NULLS LAST, id
+             LIMIT 200`
+        );
+        res.json({ ok: true, schedule: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load schedule." });
+    }
+}));
+
+app.post("/api/membership/apply", async (req, res) => {
+    try {
+        const fullName = String(req.body.full_name || "").trim();
+        const studentId = String(req.body.student_id || "").trim();
+        const phone = String(req.body.phone || "").trim();
+        const academicYear = String(req.body.academic_year || "").trim();
+        const email = req.body.email ? String(req.body.email).trim() : null;
+        const note = req.body.note ? String(req.body.note).trim() : null;
+
+        if (!fullName || !studentId || !phone || !academicYear) {
+            return res.status(400).json({ ok: false, message: "الاسم والرقم والهاتف والسنة الدراسية مطلوبة." });
+        }
+        if (fullName.length > 150 || studentId.length > 50 || phone.length > 40 || academicYear.length > 50 || (email && email.length > 255) || (note && note.length > 3000)) {
+            return res.status(400).json({ ok: false, message: "بيانات الطلب طويلة أكثر من المسموح." });
+        }
+
+        const existing = await pool.query(
+            `SELECT id, status FROM registrations
+             WHERE student_id = $1
+             ORDER BY id DESC LIMIT 1`,
+            [studentId]
+        );
+        if (existing.rows.length && existing.rows[0].status === "pending") {
+            return res.status(409).json({ ok: false, message: "يوجد طلب عضوية قيد المراجعة بهذا الرقم." });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO registrations
+             (full_name, student_id, academic_year, email, phone, note, status)
+             VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+             RETURNING id, status, created_at`,
+            [fullName, studentId, academicYear, email, phone, note]
+        );
+
+        res.status(201).json({ ok: true, application: result.rows[0] });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not submit membership application." });
+    }
+}));
+
+app.get("/api/admin/registrations", requireRoles("admin", "owner"), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT r.id, r.full_name, r.student_id, r.academic_year, r.email,
+                    r.phone, r.note, r.status, r.rejection_reason,
+                    r.created_at, r.reviewed_at,
+                    reviewer.full_name AS reviewer_name
+             FROM registrations r
+             LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
+             ORDER BY r.created_at DESC
+             LIMIT 300`
+        );
+        res.json({ ok: true, applications: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load membership applications." });
+    }
+}));
+
+app.patch("/api/admin/registrations/:id", requireRoles("admin", "owner"), async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const status = String(req.body.status || "");
+        const rejectionReason = req.body.rejection_reason ? String(req.body.rejection_reason).trim() : null;
+
+        if (!Number.isInteger(id) || !["approved", "rejected", "pending"].includes(status)) {
+            return res.status(400).json({ ok: false, message: "Invalid application status." });
+        }
+
+        const application = await pool.query(
+            `SELECT * FROM registrations WHERE id = $1 LIMIT 1`,
+            [id]
+        );
+        if (!application.rows.length) return res.status(404).json({ ok: false, message: "Application not found." });
+
+        const a = application.rows[0];
+        let linkedUserId = a.user_id;
+
+        if (status === "approved" && !linkedUserId) {
+            const existingUser = await pool.query(
+                `SELECT id FROM users WHERE student_id = $1 LIMIT 1`,
+                [a.student_id]
+            );
+            linkedUserId = existingUser.rows[0]?.id || null;
+        }
+
+        await pool.query(
+            `UPDATE registrations
+             SET status = $1, rejection_reason = $2, reviewed_by = $3, reviewed_at = NOW(), user_id = $4
+             WHERE id = $5`,
+            [status, status === "rejected" ? rejectionReason : null, req.user.id, linkedUserId, id]
+        );
+
+        await pool.query(
+            `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+             VALUES ($1, 'membership.status_changed', 'registration', $2, $3::jsonb)`,
+            [req.user.id, id, JSON.stringify({ status, user_id: linkedUserId })]
+        );
+
+        res.json({ ok: true, status, user_id: linkedUserId });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not update membership application." });
+    }
+}));
+
 async function getOrCreateCommunityConversation() {
     const existing = await pool.query(
         `SELECT id, name, type, is_private
