@@ -508,7 +508,7 @@ function requireAuth(handler) {
             }
 
             req.user = user;
-            next();
+            return handler(req, res, next);
         } catch (error) {
             console.error(error);
             res.status(500).json({
@@ -763,6 +763,415 @@ app.get("/api/presence/online-count", async (req, res) => {
         });
     }
 });
+
+/* =========================
+   INTERACTIVE COMMUNITY CONTENT
+========================= */
+
+app.get("/api/posts", async (req, res) => {
+    try {
+        const section = String(req.query.section || "community");
+        const allowed = ["community", "announcements", "activities"];
+        const safeSection = allowed.includes(section) ? section : "community";
+        const viewer = await getAuthenticatedUser(req);
+
+        const result = await pool.query(
+            `SELECT p.id, p.section, p.title, p.body, p.image_url,
+                    p.is_pinned, p.created_at, p.updated_at,
+                    p.author_id,
+                    u.full_name AS author_name,
+                    u.avatar_url AS author_avatar,
+                    COUNT(DISTINCT l.user_id)::int AS likes_count,
+                    COUNT(DISTINCT c.id)::int AS comments_count,
+                    CASE WHEN $2::bigint IS NULL THEN FALSE
+                         ELSE EXISTS(
+                           SELECT 1 FROM post_likes pl
+                           WHERE pl.post_id = p.id AND pl.user_id = $2
+                         )
+                    END AS liked
+             FROM posts p
+             JOIN users u ON u.id = p.author_id
+             LEFT JOIN post_likes l ON l.post_id = p.id
+             LEFT JOIN post_comments c ON c.post_id = p.id
+             WHERE p.section = $1
+               AND p.is_published = TRUE
+               AND u.is_active = TRUE
+             GROUP BY p.id, u.full_name, u.avatar_url
+             ORDER BY p.is_pinned DESC, p.created_at DESC
+             LIMIT 100`,
+            [safeSection, viewer ? viewer.id : null]
+        );
+
+        res.json({ ok: true, posts: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load posts." });
+    }
+});
+
+app.post("/api/posts", requireAuth(async (req, res) => {
+    try {
+        const { section, title, body, image_url } = req.body;
+        const safeSection = ["community", "announcements", "activities"].includes(section)
+            ? section
+            : "community";
+
+        if (!body || !String(body).trim()) {
+            return res.status(400).json({ ok: false, message: "Post text is required." });
+        }
+
+        if (String(body).length > 5000) {
+            return res.status(400).json({ ok: false, message: "Post is too long." });
+        }
+
+        if (safeSection !== "community" && !["admin", "owner"].includes(req.user.role)) {
+            return res.status(403).json({
+                ok: false,
+                message: "Only administrators can publish in this section."
+            });
+        }
+
+        if (image_url && (typeof image_url !== "string" || image_url.length > 3000000)) {
+            return res.status(400).json({ ok: false, message: "Invalid image." });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO posts (author_id, section, title, body, image_url)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, section, title, body, image_url, is_pinned, created_at`,
+            [
+                req.user.id,
+                safeSection,
+                title ? String(title).trim().slice(0, 255) : null,
+                String(body).trim(),
+                image_url || null
+            ]
+        );
+
+        await pool.query(
+            `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+             VALUES ($1, 'post.created', 'post', $2, $3::jsonb)`,
+            [req.user.id, result.rows[0].id, JSON.stringify({ section: safeSection })]
+        );
+
+        res.status(201).json({ ok: true, post: result.rows[0] });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not create post." });
+    }
+}));
+
+app.post("/api/posts/:id/like", requireAuth(async (req, res) => {
+    try {
+        const postId = Number(req.params.id);
+        if (!Number.isInteger(postId)) {
+            return res.status(400).json({ ok: false, message: "Invalid post ID." });
+        }
+
+        const existing = await pool.query(
+            `SELECT 1 FROM post_likes WHERE post_id = $1 AND user_id = $2`,
+            [postId, req.user.id]
+        );
+
+        if (existing.rows.length) {
+            await pool.query(
+                `DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2`,
+                [postId, req.user.id]
+            );
+        } else {
+            await pool.query(
+                `INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)`,
+                [postId, req.user.id]
+            );
+        }
+
+        const count = await pool.query(
+            `SELECT COUNT(*)::int AS count FROM post_likes WHERE post_id = $1`,
+            [postId]
+        );
+
+        res.json({
+            ok: true,
+            liked: !existing.rows.length,
+            likes_count: count.rows[0].count
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not update like." });
+    }
+}));
+
+app.get("/api/posts/:id/comments", async (req, res) => {
+    try {
+        const postId = Number(req.params.id);
+        if (!Number.isInteger(postId)) {
+            return res.status(400).json({ ok: false, message: "Invalid post ID." });
+        }
+
+        const result = await pool.query(
+            `SELECT c.id, c.body, c.created_at, c.author_id,
+                    u.full_name AS author_name, u.avatar_url AS author_avatar
+             FROM post_comments c
+             JOIN users u ON u.id = c.author_id
+             WHERE c.post_id = $1 AND u.is_active = TRUE
+             ORDER BY c.created_at ASC`,
+            [postId]
+        );
+
+        res.json({ ok: true, comments: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load comments." });
+    }
+});
+
+app.post("/api/posts/:id/comments", requireAuth(async (req, res) => {
+    try {
+        const postId = Number(req.params.id);
+        const body = String(req.body.body || "").trim();
+
+        if (!Number.isInteger(postId) || !body) {
+            return res.status(400).json({ ok: false, message: "Post and comment are required." });
+        }
+
+        if (body.length > 1500) {
+            return res.status(400).json({ ok: false, message: "Comment is too long." });
+        }
+
+        const post = await pool.query(
+            `SELECT id FROM posts WHERE id = $1 AND is_published = TRUE`,
+            [postId]
+        );
+
+        if (!post.rows.length) {
+            return res.status(404).json({ ok: false, message: "Post not found." });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO post_comments (post_id, author_id, body)
+             VALUES ($1, $2, $3)
+             RETURNING id, body, created_at`,
+            [postId, req.user.id, body]
+        );
+
+        res.status(201).json({
+            ok: true,
+            comment: {
+                ...result.rows[0],
+                author_id: req.user.id,
+                author_name: req.user.full_name,
+                author_avatar: req.user.avatar_url
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not add comment." });
+    }
+}));
+
+app.patch("/api/posts/:id/pin", requireRoles("admin", "owner"), async (req, res) => {
+    try {
+        const postId = Number(req.params.id);
+        const pinned = req.body.pinned === true;
+
+        if (!Number.isInteger(postId)) {
+            return res.status(400).json({ ok: false, message: "Invalid post ID." });
+        }
+
+        await pool.query(
+            `UPDATE posts SET is_pinned = $1, updated_at = NOW() WHERE id = $2`,
+            [pinned, postId]
+        );
+
+        await pool.query(
+            `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+             VALUES ($1, 'post.pin_changed', 'post', $2, $3::jsonb)`,
+            [req.user.id, postId, JSON.stringify({ pinned })]
+        );
+
+        res.json({ ok: true, pinned });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not update pinned state." });
+    }
+}));
+
+app.delete("/api/posts/:id", requireAuth(async (req, res) => {
+    try {
+        const postId = Number(req.params.id);
+        const target = await pool.query(
+            `SELECT author_id FROM posts WHERE id = $1`,
+            [postId]
+        );
+
+        if (!target.rows.length) {
+            return res.status(404).json({ ok: false, message: "Post not found." });
+        }
+
+        const canDelete =
+            Number(target.rows[0].author_id) === Number(req.user.id) ||
+            ["admin", "owner"].includes(req.user.role);
+
+        if (!canDelete) {
+            return res.status(403).json({ ok: false, message: "You cannot delete this post." });
+        }
+
+        await pool.query(`DELETE FROM posts WHERE id = $1`, [postId]);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not delete post." });
+    }
+}));
+
+/* =========================
+   MEMBERSHIP APPLICATIONS
+========================= */
+
+app.get("/api/membership/status", requireAuth(async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, status, academic_year, phone, created_at,
+                    reviewed_at, rejection_reason
+             FROM registrations
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [req.user.id]
+        );
+
+        res.json({
+            ok: true,
+            account: {
+                full_name: req.user.full_name,
+                student_id: req.user.student_id,
+                email: req.user.email,
+                phone: req.user.phone,
+                academic_year: req.user.academic_year,
+                role: req.user.role
+            },
+            application: result.rows[0] || null
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load membership status." });
+    }
+}));
+
+app.post("/api/membership/apply", requireAuth(async (req, res) => {
+    try {
+        const { phone, academic_year, note } = req.body;
+
+        const latest = await pool.query(
+            `SELECT id, status FROM registrations
+             WHERE user_id = $1
+             ORDER BY created_at DESC LIMIT 1`,
+            [req.user.id]
+        );
+
+        if (latest.rows[0]?.status === "pending") {
+            return res.status(409).json({ ok: false, message: "لديك طلب عضوية قيد المراجعة بالفعل." });
+        }
+
+        if (req.user.role === "member" || req.user.role === "admin" || req.user.role === "owner") {
+            return res.status(409).json({ ok: false, message: "حسابك مسجل بالفعل في النظام." });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO registrations
+                (full_name, student_id, year, academic_year, email, phone, note, user_id)
+             VALUES ($1, $2, $3, $3, $4, $5, $6, $7)
+             RETURNING id, status, created_at`,
+            [
+                req.user.full_name,
+                req.user.student_id,
+                academic_year || req.user.academic_year || null,
+                req.user.email,
+                phone || req.user.phone,
+                note || null,
+                req.user.id
+            ]
+        );
+
+        res.status(201).json({ ok: true, application: result.rows[0] });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not submit membership application." });
+    }
+}));
+
+app.get("/api/admin/membership/applications", requireRoles("admin", "owner"), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT r.*, u.role AS current_role
+             FROM registrations r
+             LEFT JOIN users u ON u.id = r.user_id
+             ORDER BY r.created_at DESC
+             LIMIT 300`
+        );
+        res.json({ ok: true, applications: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load membership applications." });
+    }
+}));
+
+app.patch("/api/admin/membership/applications/:id", requireRoles("admin", "owner"), async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const status = String(req.body.status || "");
+
+        if (!Number.isInteger(id) || !["approved", "rejected"].includes(status)) {
+            return res.status(400).json({ ok: false, message: "Invalid application decision." });
+        }
+
+        const result = await pool.query(
+            `SELECT * FROM registrations WHERE id = $1 LIMIT 1`,
+            [id]
+        );
+
+        if (!result.rows.length) {
+            return res.status(404).json({ ok: false, message: "Application not found." });
+        }
+
+        const application = result.rows[0];
+
+        await pool.query(
+            `UPDATE registrations
+             SET status = $1, reviewed_by = $2, reviewed_at = NOW(),
+                 rejection_reason = $3
+             WHERE id = $4`,
+            [
+                status,
+                req.user.id,
+                status === "rejected" ? String(req.body.rejection_reason || "").trim() || null : null,
+                id
+            ]
+        );
+
+        if (application.user_id && status === "approved") {
+            await pool.query(
+                `UPDATE users
+                 SET role = 'member',
+                     academic_year = COALESCE($1, academic_year),
+                     phone = COALESCE($2, phone)
+                 WHERE id = $3 AND role <> 'owner'`,
+                [application.academic_year, application.phone, application.user_id]
+            );
+        }
+
+        await pool.query(
+            `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+             VALUES ($1, 'membership.reviewed', 'registration', $2, $3::jsonb)`,
+            [req.user.id, id, JSON.stringify({ status })]
+        );
+
+        res.json({ ok: true, status });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not review membership application." });
+    }
+}));
 
 app.get("/api/admin/users", requireRoles("admin", "owner"), async (req, res) => {
     try {
