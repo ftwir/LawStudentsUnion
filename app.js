@@ -1458,59 +1458,59 @@ async function page(p, profileIdentifier = null){
 
     if(!currentUser){ page('login'); return; }
 
-    app.innerHTML = `
-      <div class="section-title"><h2>دردشة الاتحاد</h2><span>Members</span></div>
-      <article class="card chat-shell">
-        <div class="chat-header"><strong>مجتمع الاتحاد</strong><small>مساحة عامة لأعضاء الاتحاد</small></div>
-        <div id="chatMessages" class="chat-messages"><div class="empty">جارٍ تحميل الرسائل...</div></div>
-        <form id="chatForm" class="chat-form">
-          <input name="body" maxlength="2000" placeholder="اكتب رسالتك..." required autocomplete="off">
-          <button class="btn">إرسال</button>
-        </form>
-      </article>
-    `;
-
-    const messagesBox=document.querySelector('#chatMessages');
-    const form=document.querySelector('#chatForm');
-
-    const loadChat=async()=>{
-      try{
-        const response=await fetch(API+'/api/chat/community',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});
-        const data=await response.json();
-        if(!response.ok||!data.ok)throw new Error(data.message||'تعذر تحميل الدردشة.');
-        messagesBox.innerHTML=(data.messages||[]).length ? data.messages.map(m=>{
-          const mine=Number(m.sender.id)===Number(currentUser.id);
-          return '<div class="chat-message '+(mine?'mine':'')+'"><div class="chat-message-author">'+escapeHTML(m.sender.full_name)+'</div><div class="chat-message-body">'+escapeHTML(m.body)+'</div><small>'+escapeHTML(new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'}))+'</small></div>';
-        }).join('') : '<div class="empty">لا توجد رسائل بعد. ابدأ المحادثة.</div>';
-        messagesBox.scrollTop=messagesBox.scrollHeight;
-      }catch(e){
-        messagesBox.innerHTML='<div class="empty">'+escapeHTML(e.message)+'</div>';
-      }
-    };
-
-    form.onsubmit=async(event)=>{
-      event.preventDefault();
-      const input=form.elements.body;
-      const body=input.value.trim();
-      if(!body)return;
-      const button=form.querySelector('button');
-      button.disabled=true;
-      try{
-        const response=await fetch(API+'/api/chat/community/messages',{
-          method:'POST',
-          headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},
-          body:JSON.stringify({body})
-        });
-        const data=await response.json();
-        if(!response.ok||!data.ok)throw new Error(data.message||'تعذر إرسال الرسالة.');
-        input.value='';
-        await loadChat();
-      }catch(e){alert(e.message);}
-      finally{button.disabled=false;input.focus();}
-    };
-
-    await loadChat();
+    app.innerHTML=\`
+      <div class="chat-app">
+        <aside class="chat-list card">
+          <div class="chat-list-head"><h2>الدردشات</h2><button class="chat-new-btn" id="newChat">＋</button></div>
+          <input id="chatSearch" class="chat-search" placeholder="بحث...">
+          <div id="chatList"><div class="empty">جارٍ التحميل...</div></div>
+        </aside>
+        <section class="chat-window card">
+          <div id="chatEmpty" class="chat-empty"><strong>دردشات الاتحاد</strong><span>اختر محادثة أو أنشئ محادثة جديدة.</span></div>
+          <div id="chatActive" hidden>
+            <header class="chat-window-head"><div><strong id="chatTitle"></strong><small id="chatSubtitle"></small></div></header>
+            <div id="chatMessages" class="chat-messages"></div>
+            <form id="chatForm" class="chat-compose"><input name="body" autocomplete="off" maxlength="4000" placeholder="اكتب رسالة..."><button>➤</button></form>
+          </div>
+        </section>
+      </div>
+      <div id="chatModal" class="chat-modal" hidden>
+        <div class="chat-modal-card card">
+          <button class="modal-close" id="closeChatModal">×</button><h3>محادثة جديدة</h3>
+          <label>النوع<select id="chatType"><option value="direct">خاصة — عضو مع عضو</option><option value="group">خاصة — عدة أعضاء</option><option value="public">عامة — قناة</option></select></label>
+          <label id="chatNameWrap">اسم القناة أو المجموعة<input id="chatName" maxlength="120"></label>
+          <label>اختيار الأعضاء<input id="chatMembersSearch" placeholder="ابحث بالاسم أو رقم القيد"></label>
+          <div id="chatUsers"></div><button class="btn" id="createChatBtn">إنشاء</button>
+        </div>
+      </div>\`;
+    let conversations=[],active=null,selected=[];
+    const list=document.querySelector('#chatList'),messages=document.querySelector('#chatMessages');
+    async function loadConversations(){
+      const rr=await fetch(API+'/api/chat/conversations',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
+      if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر تحميل الدردشات.');
+      conversations=xx.conversations||[];
+      list.innerHTML=conversations.length?conversations.map(c=>\`<button class="chat-row" data-cid="\${c.id}"><span class="chat-row-avatar">\${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>\${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>\${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>\`).join(''):'<div class="empty">لا توجد محادثات بعد.</div>';
+      list.querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.cid)));
+    }
+    async function openChat(id){
+      active=conversations.find(c=>Number(c.id)===id);if(!active)return;
+      document.querySelector('#chatEmpty').hidden=true;document.querySelector('#chatActive').hidden=false;
+      document.querySelector('#chatTitle').textContent=active.name||active.members.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ');
+      document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.members.length+' أعضاء';
+      const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
+      messages.innerHTML=(xx.messages||[]).map(m=>\`<div class="bubble \${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>\${escapeHTML(m.sender.full_name)}</small><div>\${escapeHTML(m.body)}</div><time>\${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>\`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
+      messages.scrollTop=messages.scrollHeight;
+    }
+    document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;if(!input.value.trim())return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';await openChat(active.id);await loadConversations();};
+    document.querySelector('#newChat').onclick=()=>document.querySelector('#chatModal').hidden=false;
+    document.querySelector('#closeChatModal').onclick=()=>document.querySelector('#chatModal').hidden=true;
+    document.querySelector('#chatType').onchange=e=>document.querySelector('#chatNameWrap').style.display=e.target.value==='direct'?'none':'block';
+    async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>\`<button class="member-pick \${selected.includes(Number(u.id))?'selected':''}" data-uid="\${u.id}">\${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} \${escapeHTML(u.full_name)}</button>\`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
+    document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
+    document.querySelector('#createChatBtn').onclick=async()=>{const type=document.querySelector('#chatType').value;const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name:document.querySelector('#chatName').value.trim(),member_ids:selected})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إنشاء المحادثة.');return;}document.querySelector('#chatModal').hidden=true;selected=[];await loadConversations();openChat(Number(xx.conversation.id));};
+    await loadConversations();
     return;
+
   }
 }
 
