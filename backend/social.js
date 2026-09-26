@@ -7,7 +7,7 @@ const moduleExports = function(app, pool, requireAuth) {
   }
 
   async function access(conversationId, userId) {
-    const r = await pool.query("SELECT id,name,type,is_private,created_by FROM conversations WHERE id=$1 LIMIT 1", [conversationId]);
+    const r = await pool.query("SELECT id,name,description,cover_image_url,hashtags,type,is_private,created_by,host_user_id,messaging_paused,voice_room_active FROM conversations WHERE id=$1 LIMIT 1", [conversationId]);
     if (!r.rows.length) return null;
     const c = r.rows[0];
     if (!c.is_private || ["public","community"].includes(c.type)) return c;
@@ -94,7 +94,7 @@ const moduleExports = function(app, pool, requireAuth) {
     const r=await pool.query("SELECT DISTINCT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_at,c.host_user_id,c.messaging_paused,c.voice_room_active,COALESCE((SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1),'') AS last_message,(SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$1 WHERE (c.is_private=FALSE OR cm.user_id IS NOT NULL) ORDER BY last_message_at DESC NULLS LAST,c.created_at DESC",[req.user.id]);
     const conversations=[];
     for(const c of r.rows){
-      const members=await pool.query("SELECT u.id,u.full_name,u.avatar_url,u.profile_slug FROM conversation_members cm JOIN users u ON u.id=cm.user_id WHERE cm.conversation_id=$1 ORDER BY u.full_name",[c.id]);
+      const members=await pool.query("SELECT u.id,u.full_name,u.avatar_url,u.profile_slug,cm.role AS membership_role FROM conversation_members cm JOIN users u ON u.id=cm.user_id WHERE cm.conversation_id=$1 ORDER BY CASE cm.role WHEN 'host' THEN 0 WHEN 'cohost' THEN 1 ELSE 2 END,u.full_name",[c.id]);
       conversations.push({...c,id:Number(c.id),members:members.rows});
     }
     res.json({ok:true,conversations});
@@ -134,16 +134,6 @@ const moduleExports = function(app, pool, requireAuth) {
     const members=await pool.query("SELECT u.id,u.full_name,u.avatar_url,u.profile_slug,cm.role FROM conversation_members cm JOIN users u ON u.id=cm.user_id WHERE cm.conversation_id=$1 ORDER BY CASE cm.role WHEN 'host' THEN 0 WHEN 'cohost' THEN 1 ELSE 2 END,u.full_name",[id]);
     res.json({ok:true,conversation:{...r.rows[0],id:Number(r.rows[0].id),members:members.rows.map(x=>({...x,id:Number(x.id)}))}});
   }));
-
-  async function canManageChat(id,userId){
-    const r=await pool.query("SELECT c.*,cm.role AS member_role FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$2 WHERE c.id=$1",[id,userId]);
-    if(!r.rows.length) return null;
-    const c=r.rows[0];
-    const isHost=Number(c.host_user_id)===Number(userId);
-    const isCohost=c.member_role==="cohost";
-    const privileged=isHost||isCohost||["owner"].includes(String(reqUserRolePlaceholder));
-    return {c,isHost,isCohost};
-  }
 
   app.patch("/api/chat/conversations/:id", requireAuth(async (req,res)=>{
     const id=Number(req.params.id);
