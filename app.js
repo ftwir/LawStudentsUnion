@@ -1495,7 +1495,13 @@ async function renderProfileEditor(user){
 
         <label>
           السنة الدراسية
-          <input name="academic_year" maxlength="50" value="${escapeHTML(user.academic_year || '')}" placeholder="مثال: السنة الثالثة">
+          <select name="academic_year" required>
+            <option value="">اختر السنة الدراسية</option>
+            <option value="الأولى" ${user.academic_year === 'الأولى' ? 'selected' : ''}>الأولى</option>
+            <option value="الثانية" ${user.academic_year === 'الثانية' ? 'selected' : ''}>الثانية</option>
+            <option value="الثالثة" ${user.academic_year === 'الثالثة' ? 'selected' : ''}>الثالثة</option>
+            <option value="الرابعة" ${user.academic_year === 'الرابعة' ? 'selected' : ''}>الرابعة</option>
+          </select>
         </label>
 
         <label>
@@ -1550,8 +1556,8 @@ async function renderProfileEditor(user){
     const file = event.target.files?.[0];
     if(!file) return;
 
-    if(file.size > 2200000){
-      alert('الصورة كبيرة جداً. اختر صورة أقل من 2.2MB.');
+    if(file.size > 3500000){
+      alert('الصورة كبيرة جداً. اختر صورة أقل من 3.5MB.');
       event.target.value = '';
       return;
     }
@@ -1607,11 +1613,11 @@ async function renderProfileEditor(user){
 
       currentUser = result.user;
       updateDrawer();
-      status.textContent = 'تم حفظ الملف الشخصي بنجاح.';
+      status.innerHTML = '<span class="success">تم حفظ الملف الشخصي بنجاح.</span>';
       setTimeout(() => page('profile', currentUser.profile_slug || currentUser.id), 500);
 
     }catch(error){
-      status.textContent = error.message;
+      status.innerHTML = '<span class="error">'+escapeHTML(error.message)+'</span>';
       button.disabled = false;
     }
   };
