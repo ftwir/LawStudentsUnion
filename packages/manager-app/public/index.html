@@ -1,56 +1,68 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
-<head><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ACM Manager — اتحاد طلبة القانون</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ACM Manager</title>
 <style>
-html,body{margin:0;min-height:100%;background:#0b1020;color:#eef2ff;font-family:system-ui,sans-serif}body{min-height:100vh;overflow:auto;-webkit-user-select:text;user-select:text}
-main{max-width:1000px;margin:40px auto;padding:20px}
-.card{position:relative;z-index:1;background:#141b31;border:1px solid #293452;border-radius:18px;padding:20px;margin:16px 0}
-input,button{position:relative;z-index:20;pointer-events:auto;touch-action:manipulation;padding:12px;border-radius:10px;border:1px solid #34405f;background:#0d1427;color:#fff;font-size:16px;box-sizing:border-box}input{display:block;width:100%;min-height:48px;outline:none}input:focus{border-color:#6ea8fe;box-shadow:0 0 0 2px rgba(110,168,254,.2)}button{min-height:48px}
-button{cursor:pointer}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
-pre{white-space:pre-wrap;word-break:break-word}
-.badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#23304f}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;min-height:100%;background:#0b1020;color:#fff;font-family:Arial,system-ui,sans-serif}
+body{min-height:100vh}
+main{width:min(92%,520px);margin:0 auto;padding:40px 0}
+h1{font-size:28px;margin:0 0 10px}
+p{color:#b8c0d9}
+.panel{background:#151d33;border:1px solid #2d3958;border-radius:16px;padding:22px}
+label{display:block;margin:14px 0 7px;font-weight:700}
+input{display:block;width:100%;height:52px;margin:0;padding:12px;border:1px solid #52617f;border-radius:10px;background:#080d1a;color:#fff;font-size:18px;direction:ltr;text-align:left;-webkit-appearance:none;appearance:none}
+input:focus{outline:2px solid #6ea8fe;outline-offset:1px}
+button{display:block;width:100%;height:52px;margin-top:18px;border:0;border-radius:10px;background:#315fa8;color:#fff;font-size:17px;font-weight:700}
+#status{margin-top:16px;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
+.ok{background:#12351f}.err{background:#431b22}
 </style>
 </head>
 <body>
 <main>
 <h1>ACM Manager</h1>
-<p>لوحة إدارة منفصلة للتطبيق الأساسي — Owner Agent Control Plane</p>
-<div class="card">
-<label>معرف المالك</label><br><br>
-<input id="login" autocomplete="username" style="width:100%;box-sizing:border-box">
-<br><br>
-<label>كلمة مرور المالك</label><br><br>
-<input id="password" type="password" autocomplete="current-password" style="width:100%;box-sizing:border-box">
-<br><br><button onclick="connect()">تسجيل الدخول</button>
+<p>لوحة التحكم الخاصة بمالك النظام</p>
+<div class="panel">
+<label for="login">معرف المالك</label>
+<input id="login" name="login" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+<label for="password">كلمة مرور المالك</label>
+<input id="password" name="password" type="password" autocomplete="current-password">
+<button id="loginButton" type="button">تسجيل الدخول</button>
+<div id="status"></div>
 </div>
-<div id="out"></div>
 </main>
 <script>
-let credentials="";
-function box(title,data){return '<div class="card"><h2>'+title+'</h2><pre>'+JSON.stringify(data,null,2)+'</pre></div>'}
-async function get(url){
- const r=await fetch(url,{headers:{"Authorization":"Basic "+credentials}});
- const d=await r.json().catch(()=>({message:"Invalid response"}));
- if(!r.ok) throw new Error(d.message||("HTTP "+r.status));
- return d;
+(function(){
+const login=document.getElementById("login");
+const password=document.getElementById("password");
+const button=document.getElementById("loginButton");
+const status=document.getElementById("status");
+function message(text,ok){status.textContent=text;status.className=ok?"ok":"err";}
+async function request(path,credentials){
+ const response=await fetch(path,{headers:{Authorization:"Basic "+credentials,Accept:"application/json"},cache:"no-store"});
+ const text=await response.text();
+ let data;
+ try{data=JSON.parse(text)}catch(e){throw new Error("الخادم أعاد استجابة غير صالحة: "+text.slice(0,120))}
+ if(!response.ok)throw new Error(data.message||("HTTP "+response.status));
+ return data;
 }
-async function connect(){
- const login=document.getElementById("login").value;
- const password=document.getElementById("password").value;
- credentials=btoa(unescape(encodeURIComponent(login+":"+password)));
- const out=document.getElementById("out");
- out.innerHTML="<div class='card'>جارٍ الاتصال...</div>";
+button.addEventListener("click",async function(){
+ const user=login.value;
+ const pass=password.value;
+ if(!user||!pass){message("أدخل معرف المالك وكلمة المرور.",false);return}
+ const credentials=btoa(unescape(encodeURIComponent(user+":"+pass)));
+ button.disabled=true;
+ button.textContent="جارٍ التحقق...";
  try{
-  const [config,github,owner]=await Promise.all([
-   get("/api/manager/config"),get("/api/manager/github"),get("/api/manager/owner-status")
-  ]);
-  out.innerHTML=box("الحالة",config)+box("GitHub",github)+box("التطبيق الأساسي / Owner API",owner);
- }catch(e){out.innerHTML=box("خطأ",{message:e.message})}
-}
+   const config=await request("/api/manager/config",credentials);
+   message("تم تسجيل الدخول بنجاح.\n"+JSON.stringify(config,null,2),true);
+ }catch(e){message(e.message,false)}
+ finally{button.disabled=false;button.textContent="تسجيل الدخول"}
+});
+})();
 </script>
 </body>
 </html>
