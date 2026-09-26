@@ -3,6 +3,18 @@ const API = 'https://lawstudentsunionapi.onrender.com';
 const app = document.querySelector('#app');
 
 let currentUser = null;
+
+// Global notification updater: defined at bootstrap so every event handler can safely call it.
+async function updateNotificationDot(){
+  const dot=document.querySelector('#notificationDot');
+  if(!dot || !currentUser) return;
+  try{
+    const r=await fetch(API+'/api/user-notifications',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});
+    const x=await r.json();
+    dot.hidden=!(x.ok && (x.notifications||[]).some(n=>!n.is_read));
+  }catch(e){}
+}
+window.updateNotificationDot=updateNotificationDot;
 let currentPageName='home';
 let chatPollTimer=null;
 let chatViewId=0;
@@ -2041,16 +2053,6 @@ function drawer(open){
 }
 
 
-async function updateNotificationDot(){
-  const dot=document.querySelector('#notificationDot');
-  if(!dot || !currentUser) return;
-  try{
-    const r=await fetch(API+'/api/user-notifications',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});
-    const x=await r.json();
-    dot.hidden=!(x.ok && (x.notifications||[]).some(n=>!n.is_read));
-  }catch(e){}
-}
-window.updateNotificationDot = updateNotificationDot;
 
 function bindGlobalControls(){
   function resetHiddenOverlays(){
