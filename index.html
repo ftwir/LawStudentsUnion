@@ -79,6 +79,28 @@
 
 <div id="shade"></div>
 
+<script>
+(function(){
+  function showRuntimeError(message){
+    let box=document.getElementById('runtimeError');
+    if(!box){
+      box=document.createElement('div');
+      box.id='runtimeError';
+      box.style.cssText='position:fixed;left:10px;right:10px;bottom:10px;z-index:99999;background:#7f1d1d;color:#fff;padding:12px 14px;border-radius:12px;font:13px/1.5 Arial,sans-serif;box-shadow:0 8px 30px #0008;direction:ltr;text-align:left;';
+      document.body.appendChild(box);
+    }
+    box.textContent='JavaScript error: '+String(message||'Unknown error');
+  }
+  window.addEventListener('error',function(e){
+    if(e.error||e.message)showRuntimeError(e.message||(e.error&&e.error.message));
+  });
+  window.addEventListener('unhandledrejection',function(e){
+    const r=e.reason;
+    showRuntimeError(r&&r.message?r.message:String(r||'Unhandled promise rejection'));
+  });
+  window.__LSU_RUNTIME_DIAGNOSTIC__=true;
+})();
+</script>
 <script src="app.js?v=20260926-4"></script>
 </body>
 </html>
