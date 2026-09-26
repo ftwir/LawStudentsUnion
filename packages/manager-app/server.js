@@ -82,7 +82,7 @@ app.post("/api/manager/login", async (req, res) => {
         console.error(error);
         res.status(502).json({ok:false,message:"Could not reach Student API."});
     }
-}
+});
 
 app.get("/health", (req, res) => {
     res.json({
