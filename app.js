@@ -950,11 +950,10 @@ async function page(p, profileIdentifier = null){
 
   if(p === 'announcements'){
 
-    const data =
-      await getData(
-        'announcements',
-        demo.announcements
-      );
+    const response = await fetch(API+'/api/announcements',{cache:'no-store'});
+    const payload = await response.json();
+    if(!response.ok||!payload.ok) throw new Error(payload.message||'تعذر تحميل الإعلانات.');
+    const data = payload.announcements || [];
 
     app.innerHTML = `
 
@@ -991,11 +990,10 @@ async function page(p, profileIdentifier = null){
 
   if(p === 'activities'){
 
-    const data =
-      await getData(
-        'activities',
-        demo.activities
-      );
+    const response = await fetch(API+'/api/activities',{cache:'no-store'});
+    const payload = await response.json();
+    if(!response.ok||!payload.ok) throw new Error(payload.message||'تعذر تحميل الأنشطة.');
+    const data = payload.activities || [];
 
     app.innerHTML = `
 
@@ -1032,11 +1030,11 @@ async function page(p, profileIdentifier = null){
 
   if(p === 'notifications'){
 
-    const data =
-      await getData(
-        'notifications',
-        []
-      );
+    if(!currentUser){ page('login'); return; }
+    const response = await fetch(API+'/api/notifications',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});
+    const payload = await response.json();
+    if(!response.ok||!payload.ok) throw new Error(payload.message||'تعذر تحميل الإشعارات.');
+    const data = payload.notifications || [];
 
     app.innerHTML = `
 
@@ -1076,11 +1074,10 @@ async function page(p, profileIdentifier = null){
 
   if(p === 'schedule'){
 
-    const data =
-      await getData(
-        'schedule',
-        demo.schedule
-      );
+    const response = await fetch(API+'/api/schedule',{cache:'no-store'});
+    const payload = await response.json();
+    if(!response.ok||!payload.ok) throw new Error(payload.message||'تعذر تحميل الجدول الدراسي.');
+    const data = payload.schedule || [];
 
     app.innerHTML = `
 
@@ -1271,8 +1268,16 @@ async function page(p, profileIdentifier = null){
         /api/membership/apply
       */
 
-      status.textContent =
-        'تم تجهيز الطلب. سيتم ربطه بلوحة الإدارة في المرحلة التالية.';
+      const payload = Object.fromEntries(new FormData(form).entries());
+      try{
+        const response = await fetch(API+'/api/membership/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const data = await response.json();
+        if(!response.ok||!data.ok) throw new Error(data.message||'تعذر إرسال الطلب.');
+        status.innerHTML='<span class="success">تم إرسال طلب العضوية بنجاح. رقم الطلب: '+escapeHTML(String(data.application.id))+'</span>';
+        form.reset();
+      }catch(error){
+        status.innerHTML='<span class="error">'+escapeHTML(error.message)+'</span>';
+      }
     };
 
     return;
