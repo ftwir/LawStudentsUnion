@@ -644,6 +644,136 @@ async function renderCreatePost(){
    PAGE ROUTER
 ========================= */
 
+
+async function adminFetch(path, options = {}) {
+  const headers = {
+    ...(options.body ? {'Content-Type':'application/json'} : {}),
+    ...(options.headers || {}),
+    Authorization: 'Bearer ' + getToken()
+  };
+  const response = await fetch(API + path, {...options, headers, cache:'no-store'});
+  const result = await response.json().catch(() => ({ok:false,message:'استجابة غير صالحة من الخادم.'}));
+  if(!response.ok || !result.ok) throw new Error(result.message || 'تعذر تنفيذ العملية.');
+  return result;
+}
+
+function managementGuard(target) {
+  if(['admin','members','content','reports'].includes(target) && !['admin','owner'].includes(role())) return false;
+  if(['owner','admins','users','private-chats','logs','settings'].includes(target) && role() !== 'owner') return false;
+  return true;
+}
+
+async function renderManagementPage(target){
+  if(!managementGuard(target)){ page('home'); return; }
+
+  const titles = {
+    admin:'لوحة الإدارة',
+    members:'إدارة الأعضاء',
+    content:'إدارة المحتوى',
+    reports:'البلاغات',
+    owner:'مركز المالك',
+    admins:'إدارة الـAdmins',
+    users:'جميع المستخدمين',
+    'private-chats':'القنوات الخاصة',
+    logs:'سجل النظام',
+    settings:'إعدادات النظام',
+    applications:'طلبات العضوية'
+  };
+
+  app.innerHTML = '<div class="section-title"><h2>'+escapeHTML(titles[target] || 'الإدارة')+'</h2><span>Management</span></div><div class="card"><div class="empty">جارٍ تحميل البيانات...</div></div>';
+
+  try{
+    if(target === 'applications'){
+      app.innerHTML = '<div class="section-title"><h2>طلبات العضوية</h2><span>Membership</span></div><article class="card"><h3>طلبات العضوية</h3><p>نظام التسجيل الحالي ينشئ حساب العضو مباشرة بعد نجاح التسجيل، لذلك لا توجد طلبات معلقة منفصلة في قاعدة البيانات الحالية.</p></article>';
+      return;
+    }
+
+    if(target === 'members' || target === 'users' || target === 'admins'){
+      const data = await adminFetch('/api/admin/users');
+      const users = data.users || [];
+      const onlyAdmins = target === 'admins';
+      const visible = onlyAdmins ? users.filter(u => u.role === 'admin') : users;
+      app.innerHTML =
+        '<div class="section-title"><h2>'+escapeHTML(titles[target])+'</h2><span>'+visible.length+' حساب</span></div>'+
+        '<div class="card admin-table-wrap"><div class="admin-toolbar"><input id="userSearch" placeholder="بحث بالاسم أو الرقم الجامعي..."></div><div id="usersList"></div></div>';
+
+      const renderUsers = () => {
+        const q=(document.querySelector('#userSearch')?.value||'').trim().toLowerCase();
+        const filtered=visible.filter(u => !q || [u.full_name,u.student_id,u.email,u.academic_year].some(v=>String(v||'').toLowerCase().includes(q)));
+        document.querySelector('#usersList').innerHTML = filtered.length ? filtered.map(u =>
+          '<div class="admin-user-row">'+
+            '<div><strong>'+escapeHTML(u.full_name)+'</strong><small>'+escapeHTML(u.student_id||'—')+' · '+escapeHTML(u.academic_year||'غير محددة')+'</small></div>'+
+            '<div class="admin-user-meta"><span class="tag">'+escapeHTML(u.role)+'</span><span class="status-dot '+(u.is_active?'on':'off')+'">'+(u.is_active?'نشط':'موقوف')+'</span></div>'+
+            '<div class="admin-user-actions">'+
+              (role()==='owner' ? '<select data-role="'+u.id+'"><option value="member" '+(u.role==='member'?'selected':'')+'>عضو</option><option value="admin" '+(u.role==='admin'?'selected':'')+'>Admin</option></select>' : '')+
+              '<button class="btn secondary" data-status="'+u.id+'" data-active="'+u.is_active+'">'+(u.is_active?'تعطيل':'تفعيل')+'</button>'+
+            '</div></div>'
+        ).join('') : '<div class="empty">لا توجد نتائج.</div>';
+
+        document.querySelectorAll('[data-status]').forEach(btn=>btn.onclick=async()=>{
+          try{
+            await adminFetch('/api/admin/users/'+btn.dataset.status+'/status',{method:'PATCH',body:JSON.stringify({is_active:btn.dataset.active!=='true'})});
+            await renderManagementPage(target);
+          }catch(e){alert(e.message);}
+        });
+        document.querySelectorAll('[data-role]').forEach(select=>select.onchange=async()=>{
+          try{
+            await adminFetch('/api/owner/users/'+select.dataset.role+'/role',{method:'PATCH',body:JSON.stringify({role:select.value})});
+            await renderManagementPage(target);
+          }catch(e){alert(e.message);await renderManagementPage(target);}
+        });
+      };
+      document.querySelector('#userSearch').oninput=renderUsers;
+      renderUsers();
+      return;
+    }
+
+    if(target === 'content'){
+      const sections=['community','announcements','activities','study'];
+      const groups=await Promise.all(sections.map(s=>fetchPosts(s).then(posts=>posts.map(p=>({...p,section:s})))));
+      const posts=groups.flat().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+      app.innerHTML='<div class="section-title"><h2>إدارة المحتوى</h2><span>'+posts.length+' منشور</span></div><div class="feed" id="managementFeed"></div>';
+      const box=document.querySelector('#managementFeed');
+      box.innerHTML=posts.length?posts.map(postHTML).join(''):'<div class="empty">لا توجد منشورات.</div>';
+      bindPostEvents(box,'community');
+      return;
+    }
+
+    if(target === 'logs'){
+      const data=await adminFetch('/api/admin/audit-logs');
+      app.innerHTML='<div class="section-title"><h2>سجل النظام</h2><span>'+((data.logs||[]).length)+' عملية</span></div><div class="card admin-log-list">'+((data.logs||[]).map(log =>
+        '<div class="admin-log-row"><strong>'+escapeHTML(log.action)+'</strong><span>'+escapeHTML(log.actor_name||'النظام')+'</span><small>'+escapeHTML(new Date(log.created_at).toLocaleString('ar-LY'))+'</small></div>'
+      ).join('')||'<div class="empty">لا توجد سجلات بعد.</div>')+'</div>';
+      return;
+    }
+
+    if(target === 'private-chats'){
+      app.innerHTML='<div class="section-title"><h2>القنوات الخاصة</h2><span>Owner</span></div><article class="card"><h3>القنوات الخاصة</h3><p>هذه المساحة محجوزة للقنوات الإدارية الخاصة. سيتم تفعيلها عندما يتم ربط نظام الدردشة الخاص بالاتحاد بالـAPI.</p></article>';
+      return;
+    }
+
+    if(target === 'settings'){
+      app.innerHTML='<div class="section-title"><h2>إعدادات النظام</h2><span>Owner</span></div><article class="card"><h3>إعدادات النظام</h3><p>الإعدادات الحساسة تبقى في بيئة الخادم. لا يتم عرض أسرار الاتصال أو بيانات المالك داخل واجهة الأعضاء.</p></article>';
+      return;
+    }
+
+    const data=await adminFetch('/api/admin/users');
+    const users=data.users||[];
+    const active=users.filter(u=>u.is_active).length;
+    const admins=users.filter(u=>u.role==='admin').length;
+    app.innerHTML='<div class="section-title"><h2>'+escapeHTML(titles[target])+'</h2><span>Live</span></div>'+
+      '<div class="community-grid admin-stats">'+
+      '<div class="community-box"><strong>'+users.length+'</strong><span>حسابات ظاهرة للإدارة</span></div>'+
+      '<div class="community-box"><strong>'+active+'</strong><span>حسابات نشطة</span></div>'+
+      '<div class="community-box"><strong>'+admins+'</strong><span>Admins</span></div>'+
+      '<div class="community-box"><strong>'+((await Promise.all(['community','announcements','activities','study'].map(s=>fetchPosts(s).catch(()=>[])))).flat().length)+'</strong><span>منشورات المجتمع</span></div>'+
+      '</div>'+
+      '<article class="card"><h3>'+escapeHTML(target==='owner'?'مركز المالك':'لوحة الإدارة')+'</h3><p>الصلاحيات تُفرض من الخادم، وهذه الواجهة تعرض البيانات الفعلية بدلاً من صفحات تجريبية.</p></article>';
+  }catch(error){
+    app.innerHTML='<div class="empty"><h3>تعذر تحميل هذه الصفحة</h3><p>'+escapeHTML(error.message)+'</p><button class="btn" onclick="page(\''+escapeHTML(target)+'\')">إعادة المحاولة</button></div>';
+  }
+}
+
 async function page(p, profileIdentifier = null){
 
   document
@@ -1133,105 +1263,10 @@ async function page(p, profileIdentifier = null){
   }
 
 
-  if(
-    [
-      'admin',
-      'members',
-      'applications',
-      'content',
-      'reports'
-    ].includes(p) &&
-    !['admin','owner'].includes(role())
-  ){
-
-    page('home');
-
+  if(['admin','members','applications','content','reports','owner','admins','users','private-chats','logs','settings'].includes(p)){
+    await renderManagementPage(p);
     return;
   }
-
-
-  if(
-    [
-      'owner',
-      'admins',
-      'users',
-      'private-chats',
-      'logs',
-      'settings'
-    ].includes(p) &&
-    role() !== 'owner'
-  ){
-
-    page('home');
-
-    return;
-  }
-
-
-  if(
-    [
-      'admin',
-      'members',
-      'applications',
-      'content',
-      'reports',
-      'owner',
-      'admins',
-      'users',
-      'private-chats',
-      'logs',
-      'settings'
-    ].includes(p)
-  ){
-
-    const title = {
-
-      admin:'لوحة الإدارة',
-      members:'إدارة الأعضاء',
-      applications:'طلبات العضوية',
-      content:'إدارة المحتوى',
-      reports:'البلاغات',
-
-      owner:'مركز المالك',
-      admins:'إدارة الـAdmins',
-      users:'جميع المستخدمين',
-      'private-chats':'القنوات الخاصة',
-      logs:'سجل النظام',
-      settings:'إعدادات النظام'
-
-    }[p];
-
-
-    app.innerHTML = `
-
-      <div class="section-title">
-        <h2>${title}</h2>
-        <span>
-          ${role() === 'owner'
-            ? 'OWNER'
-            : 'ADMIN'}
-        </span>
-      </div>
-
-      <div class="card">
-
-        <h3>
-          ${title}
-        </h3>
-
-        <p>
-          هذه الواجهة جاهزة ضمن التصميم الجديد،
-          وسيتم ربطها ببيانات قاعدة PostgreSQL
-          وصلاحيات الـAPI في المرحلة التالية.
-        </p>
-
-      </div>
-
-    `;
-
-    return;
-  }
-
 
   if(p === 'about'){
 
