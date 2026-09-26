@@ -9,6 +9,7 @@ const GITHUB_REPO = process.env.GITHUB_REPO || "ftwir/LawStudentsUnion";
 const GITHUB_REF = process.env.GITHUB_REF || "main";
 
 app.use(express.json({ limit: "1mb" }));
+app.use((req, res, next) => { res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate"); res.setHeader("Pragma", "no-cache"); next(); });
 app.use(express.static(path.join(__dirname, "public")));
 
 function safeEqual(a, b) {
