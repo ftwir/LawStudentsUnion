@@ -542,12 +542,12 @@ function bindPostEvents(container,section){
     post.querySelector('[data-action="pin"]')?.addEventListener('click',async()=>{
       const pinned=!post.querySelector('[data-action="pin"]').textContent.includes('إلغاء');
       const r=await fetch(API+'/api/posts/'+id+'/pin',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({pinned})});
-      const x=await r.json();if(!r.ok||!x.ok){alert(x.message||'تعذر تحديث التثبيت.');return;}await refreshPostsIn(container,section);
+      const x=await r.json();if(!r.ok||!x.ok){alert(x.message||'تعذر تحديث التثبيت.');return;}if(section==='__management__'){await renderManagementPage('content');}else{await refreshPostsIn(container,section);}
     });
     post.querySelector('[data-action="delete"]')?.addEventListener('click',async()=>{
       if(!confirm('هل تريد حذف هذا المنشور؟'))return;
       const r=await fetch(API+'/api/posts/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}});
-      const x=await r.json();if(!r.ok||!x.ok){alert(x.message||'تعذر حذف المنشور.');return;}await refreshPostsIn(container,section);
+      const x=await r.json();if(!r.ok||!x.ok){alert(x.message||'تعذر حذف المنشور.');return;}if(section==='__management__'){await renderManagementPage('content');}else{await refreshPostsIn(container,section);}
     });
     post.querySelector('.comment-form')?.addEventListener('submit',async e=>{
       e.preventDefault();const input=e.currentTarget.elements.body;if(!input.value.trim())return;
@@ -735,7 +735,7 @@ async function renderManagementPage(target){
       app.innerHTML='<div class="section-title"><h2>إدارة المحتوى</h2><span>'+posts.length+' منشور</span></div><div class="feed" id="managementFeed"></div>';
       const box=document.querySelector('#managementFeed');
       box.innerHTML=posts.length?posts.map(postHTML).join(''):'<div class="empty">لا توجد منشورات.</div>';
-      bindPostEvents(box,'community');
+      bindPostEvents(box,'__management__');
       return;
     }
 
