@@ -1615,7 +1615,7 @@ async function renderProfileEditor(user){
         </label>
 
         <label class="check-row">
-          <input name="show_online" type="checkbox" ${user.show_online !== false ? 'checked' : ''}>
+          <input name="show_online" type="checkbox" ${user.privacy_settings?.show_online !== false ? 'checked' : ''}>
           إظهار حالة الاتصال للآخرين
         </label>
 
