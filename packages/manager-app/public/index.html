@@ -14,7 +14,7 @@ h1{font-size:28px;margin:0 0 10px}
 p{color:#b8c0d9}
 .panel{background:#151d33;border:1px solid #2d3958;border-radius:16px;padding:22px}
 label{display:block;margin:14px 0 7px;font-weight:700}
-input{display:block;width:100%;height:52px;margin:0;padding:12px;border:1px solid #52617f;border-radius:10px;background:#080d1a;color:#fff;font-size:18px;direction:ltr;text-align:left;-webkit-appearance:none;appearance:none}
+input{display:block;width:100%;height:52px;position:relative;z-index:10;pointer-events:auto;touch-action:manipulation;user-select:text;-webkit-user-select:text;margin:0;padding:12px;border:1px solid #52617f;border-radius:10px;background:#080d1a;color:#fff;font-size:18px;direction:ltr;text-align:left;-webkit-appearance:none;appearance:none}
 input:focus{outline:2px solid #6ea8fe;outline-offset:1px}
 button{display:block;width:100%;height:52px;margin-top:18px;border:0;border-radius:10px;background:#315fa8;color:#fff;font-size:17px;font-weight:700}
 #status{margin-top:16px;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
@@ -25,11 +25,11 @@ button{display:block;width:100%;height:52px;margin-top:18px;border:0;border-radi
 <main>
 <h1>ACM Manager</h1>
 <p>لوحة التحكم الخاصة بمالك النظام</p>
-<div class="panel">
+<div class="panel" style="position:relative;z-index:1;">
 <label for="login">معرف المالك</label>
-<input id="login" name="login" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+<input id="login" name="login" type="text" inputmode="text" autocomplete="username" autocapitalize="none" spellcheck="false" tabindex="1" aria-label="معرف المالك">
 <label for="password">كلمة مرور المالك</label>
-<input id="password" name="password" type="password" autocomplete="current-password">
+<input id="password" name="password" type="password" inputmode="text" autocomplete="current-password" tabindex="2" aria-label="كلمة مرور المالك">
 <button id="loginButton" type="button">تسجيل الدخول</button>
 <div id="status"></div>
 </div>
