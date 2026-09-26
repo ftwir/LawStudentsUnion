@@ -1,3 +1,72 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>ACM Manager</title><style>
-html,body{margin:0;min-height:100%;background:#0b1020;color:#fff;font-family:Arial,system-ui,sans-serif}body{padding:24px 0}main{width:92%;max-width:520px;margin:auto}.panel{background:#151d33;border:1px solid #2d3958;border-radius:16px;padding:22px}h1{margin:0 0 10px}p{color:#b8c0d9}label{display:block;margin:16px 0 7px;font-weight:700}.field{display:block;width:100%;height:54px;box-sizing:border-box;padding:13px;border:2px solid #52617f;border-radius:10px;background:#080d1a;color:#fff;font:18px Arial,sans-serif;direction:ltr;text-align:left;outline:0;cursor:text;pointer-events:auto;touch-action:auto;-webkit-user-select:text;user-select:text;-webkit-user-modify:read-write-plaintext-only}.field:focus{border-color:#6ea8fe}button{width:100%;height:54px;margin-top:20px;border:0;border-radius:10px;background:#315fa8;color:#fff;font-size:17px;font-weight:700}#status{margin-top:16px;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word}.ok{background:#12351f}.err{background:#431b22}</style></head><body><main><h1>ACM Manager</h1><p>لوحة التحكم الخاصة بمالك النظام</p><div class="panel"><form id="loginForm" autocomplete="on"><label for="login">معرف المالك</label><input class="field" id="login" name="username" type="text" inputmode="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"><label for="password">كلمة مرور المالك</label><input class="field" id="password" name="password" type="password" inputmode="text" autocomplete="current-password"><button id="loginButton" type="submit">تسجيل الدخول</button></form><div id="status"></div></div></main><script>
-(function(){const form=document.getElementById("loginForm"),login=document.getElementById("login"),password=document.getElementById("password"),button=document.getElementById("loginButton"),status=document.getElementById("status");let token="";function message(t,ok){status.textContent=t;status.className=ok?"ok":"err"}async function api(path,options){const headers=Object.assign({"Accept":"application/json"},options&&options.headers||{});if(token)headers.Authorization="Bearer "+token;const r=await fetch(path,Object.assign({},options||{},{headers,cache:"no-store"}));const t=await r.text();let d;try{d=JSON.parse(t)}catch(e){throw Error("استجابة غير صالحة من الخادم")}if(!r.ok)throw Error(d.message||("HTTP "+r.status));return d}form.addEventListener("submit",async function(e){e.preventDefault();const identifier=login.value.trim(),pass=password.value;if(!identifier||!pass){message("أدخل معرف المالك وكلمة المرور.",false);return}button.disabled=true;button.textContent="جارٍ تسجيل الدخول...";try{const r=await api("/api/manager/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({identifier,password:pass})});token=r.token;password.value="";const c=await api("/api/manager/config");message("تم تسجيل الدخول بنجاح.\n"+JSON.stringify({user:r.user,config:c},null,2),true)}catch(e){token="";message(e.message,false)}finally{button.disabled=false;button.textContent="تسجيل الدخول"}})})();</script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>دخول مالك النظام</title>
+<style>
+html,body{margin:0;padding:0;background:#0b1020;color:#fff;font-family:system-ui,Arial,sans-serif}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{width:min(90vw,420px);padding:28px;background:#151d33;border:1px solid #34415f;border-radius:18px}
+h1{margin:0 0 8px;font-size:26px}p{margin:0 0 24px;color:#aeb8d0}
+label{display:block;margin:16px 0 7px;font-weight:700}
+input{width:100%;height:52px;padding:0 14px;box-sizing:border-box;border:1px solid #66738f;border-radius:10px;background:#080d1a;color:white;font-size:18px;outline:none}
+input:focus{border-color:#8eb7ff;box-shadow:0 0 0 2px #315fa8}
+button{width:100%;height:52px;margin-top:22px;border:0;border-radius:10px;background:#315fa8;color:white;font-size:17px;font-weight:700}
+button:disabled{opacity:.6}
+#message{min-height:24px;margin-top:16px;padding:10px;border-radius:8px;white-space:pre-wrap}
+.error{background:#4a1d25}.success{background:#163b28}
+</style>
+</head>
+<body>
+<section class="card">
+<h1>دخول مالك النظام</h1>
+<p>تسجيل الدخول يتم التحقق منه مباشرة عبر قاعدة بيانات الاتحاد.</p>
+<form id="ownerLogin" autocomplete="on">
+<label for="identifier">معرف المالك</label>
+<input id="identifier" name="username" type="text" autocomplete="username" autocorrect="off" autocapitalize="none" spellcheck="false">
+<label for="password">كلمة المرور</label>
+<input id="password" name="password" type="password" autocomplete="current-password">
+<button id="submit" type="submit">تسجيل الدخول</button>
+</form>
+<div id="message" aria-live="polite"></div>
+</section>
+<script>
+const form=document.getElementById("ownerLogin");
+const identifier=document.getElementById("identifier");
+const password=document.getElementById("password");
+const submit=document.getElementById("submit");
+const message=document.getElementById("message");
+
+form.addEventListener("submit",async event=>{
+ event.preventDefault();
+ const id=identifier.value.trim();
+ const pass=password.value;
+ message.className="";
+ message.textContent="";
+ if(!id||!pass){message.className="error";message.textContent="يرجى إدخال معرف المالك وكلمة المرور.";return;}
+ submit.disabled=true;submit.textContent="جارٍ التحقق من قاعدة البيانات...";
+ try{
+  const response=await fetch("/api/manager/login?fresh="+Date.now(),{
+   method:"POST",
+   headers:{"Content-Type":"application/json","Accept":"application/json"},
+   cache:"no-store",
+   body:JSON.stringify({identifier:id,password:pass})
+  });
+  const data=await response.json().catch(()=>({ok:false,message:"تعذر قراءة استجابة الخادم."}));
+  if(!response.ok||!data.ok)throw new Error(data.message||"بيانات الدخول غير صحيحة.");
+  sessionStorage.setItem("acm_owner_token",data.token);
+  message.className="success";
+  message.textContent="تم التحقق من حساب المالك بنجاح. جارٍ فتح لوحة التحكم...";
+  window.location.href="/?owner="+encodeURIComponent(data.token);
+ }catch(error){
+  message.className="error";
+  message.textContent=error.message;
+ }finally{
+  submit.disabled=false;
+  submit.textContent="تسجيل الدخول";
+ }
+});
+</script>
+</body>
+</html>
