@@ -1565,7 +1565,7 @@ async function page(p, profileIdentifier = null){
       active=conversations.find(c=>Number(c.id)===id);if(!active)return;
       document.querySelector('#chatEmpty').hidden=true;document.querySelector('#chatActive').hidden=false;
       document.querySelector('#chatTitle').textContent=active.name||active.members.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ');
-      document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.type==='direct'?'محادثة خاصة':active.members.length+' أعضاء'+(active.messaging_paused?' · الإرسال متوقف':'');document.querySelector('#chatTags').innerHTML=hashtagsHTML(active.hashtags||[]);const manage=document.querySelector('#chatManageBtn');manage.style.display=active.type==='direct'?'none':'block';manage.onclick=()=>openChatManagement(active);
+      document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.type==='direct'?'محادثة خاصة':active.members.length+' أعضاء'+(active.messaging_paused?' · الإرسال متوقف':'');document.querySelector('#chatTags').innerHTML=hashtagsHTML(active.hashtags||[]);const manage=document.querySelector('#chatManageBtn');const myRole=active.members?.find(m=>Number(m.id)===Number(currentUser.id))?.membership_role;manage.style.display=active.type==='direct'||(Number(active.host_user_id)!==Number(currentUser.id)&&myRole!=='cohost'&&role()!=='owner')?'none':'block';manage.onclick=()=>openChatManagement(active);
       const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       const wasNearBottom=messages.scrollHeight-messages.scrollTop-messages.clientHeight<100;
       messages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble ${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>${escapeHTML(m.sender.full_name)}</small><div>${escapeHTML(m.body)}</div><time>${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
@@ -1791,7 +1791,7 @@ async function openChatManagement(chat){
   modal.querySelectorAll('[data-kick]').forEach(b=>b.onclick=async()=>{if(!confirm('طرد هذا العضو من الدردشة؟'))return;const z=await fetch(API+'/api/chat/conversations/'+chat.id+'/members/'+b.dataset.kick,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}});const j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر الطرد.');return;}close();openChatManagement(chat);});
 }
 function closeCreateChatModal(){const modal=document.querySelector('#chatModal');if(!modal)return;modal.classList.remove('open');setTimeout(()=>{if(modal)modal.hidden=true;},180);}
-async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;const search=document.querySelector('#chatMembersSearch');const name=document.querySelector('#chatName');const desc=document.querySelector('#chatDescription');const tags=document.querySelector('#chatHashtags');if(search)search.value='';if(name)name.value='';if(desc)desc.value='';if(tags)tags.value='';select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
+async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;const search=document.querySelector('#chatMembersSearch');const name=document.querySelector('#chatName');const desc=document.querySelector('#chatDescription');const tags=document.querySelector('#chatHashtags');if(search)search.value='';if(name)name.value='';if(desc)desc.value='';if(tags)tags.value='';const cover=document.querySelector('#chatCover');if(cover){cover.value='';delete cover.dataset.data;}if(document.querySelector('#chatCoverPreview'))document.querySelector('#chatCoverPreview').innerHTML='';select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
 function openCreationHub(){
   if(!currentUser){ page('login'); return; }
   const existing=document.querySelector('#creationHub');
@@ -1850,8 +1850,8 @@ function markNotificationsRead(){
 ========================= */
 
 let drawerTouchStartX=0;
-document.addEventListener('touchstart',e=>{drawerTouchStartX=e.changedTouches[0].clientX;},{passive:true});
-document.addEventListener('touchmove',e=>{if(document.querySelector('#drawer.open'))e.preventDefault();},{passive:false});
+document.addEventListener('touchstart',e=>{drawerTouchStartX=e.changedTouches[0].clientX;window.__drawerTouchStartY=e.changedTouches[0].clientY;},{passive:true});
+document.addEventListener('touchmove',e=>{if(!document.querySelector('#drawer.open'))return;const t=e.touches[0];const dx=t.clientX-drawerTouchStartX;const dy=t.clientY-(window.__drawerTouchStartY||t.clientY);if(Math.abs(dx)>Math.abs(dy)&&dx>0)e.preventDefault();},{passive:false});
 document.addEventListener('touchend',e=>{const end=e.changedTouches[0].clientX,delta=end-drawerTouchStartX,open=document.querySelector('#drawer')?.classList.contains('open');if(open&&delta>60)drawer(false);else if(!open&&drawerTouchStartX>window.innerWidth-32&&delta<-60){updateDrawer();drawer(true);}});
 function drawer(open){
 
