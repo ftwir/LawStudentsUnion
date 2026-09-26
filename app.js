@@ -685,7 +685,7 @@ async function renderCreatePost(){
   document.querySelectorAll('.create-type').forEach(b=>b.onclick=()=>render(b.dataset.type));render('post');
 
 
-/* =========================
+}/* =========================
    PAGE ROUTER
 ========================= */
 
