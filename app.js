@@ -249,7 +249,7 @@ function updateDrawer(){
     guest:'زائر',
     member:'عضو',
     admin:'Admin',
-    owner:'Owner'
+    owner:'عضو'
   };
 
   name.textContent =
@@ -1328,7 +1328,7 @@ async function page(p, profileIdentifier = null){
             <div class="profile-main-info">
               <h1>${escapeHTML(user.full_name)}</h1>
               <div class="profile-meta">
-                <span class="role-badge">${escapeHTML(user.role)}</span>
+                <span class="role-badge">عضو</span>
                 <span class="presence-dot ${user.online ? 'online' : ''}"></span>
                 <span>${user.online ? 'متصل الآن' : 'غير متصل'}</span>
               </div>
