@@ -1350,8 +1350,9 @@ async function page(p, profileIdentifier = null){
         const response = await fetch(API+'/api/membership/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         const data = await response.json();
         if(!response.ok||!data.ok) throw new Error(data.message||'تعذر إرسال الطلب.');
-        status.innerHTML='<span class="success">تم إرسال طلب العضوية بنجاح. رقم الطلب: '+escapeHTML(String(data.application.id))+'</span>';
-        form.reset();
+        status.innerHTML='<span class="success">تم إرسال طلب العضوية بنجاح. رقم الطلب: '+escapeHTML(String(data.application.id))+'<br>سيتم نقلك إلى الصفحة الرئيسية...</span>';
+        form.querySelectorAll('input,select,textarea,button').forEach(el=>el.disabled=true);
+        setTimeout(()=>page('home'),900);
       }catch(error){
         status.innerHTML='<span class="error">'+escapeHTML(error.message)+'</span>';
       }
@@ -2123,8 +2124,6 @@ function throttle(fn,wait=100){
   const onScroll=throttle(()=>{},100);
   window.addEventListener('scroll',onScroll,{passive:true});
 })();
-
-}
 
 /* =========================
    START
