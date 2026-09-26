@@ -26,8 +26,9 @@
     </div>
   </div>
 
-  <button class="top-action" data-page="notifications">
-    🔔
+  <button class="top-action notification-button" data-page="notifications" aria-label="الإشعارات">
+    <span class="bell-icon" aria-hidden="true"></span>
+    <span class="notification-dot" id="notificationDot" hidden></span>
   </button>
 
 </header>
@@ -35,31 +36,25 @@
 <main id="app"></main>
 
 <nav class="bottom-nav">
-
-  <button data-page="home">
-    <span>⌂</span>
-    الرئيسية
+  <button id="bottomMenu" aria-label="القائمة">
+    <span>☰</span>
+    القائمة
   </button>
-
   <button data-page="activities">
     <span>◈</span>
     الأنشطة
   </button>
-
-  <button class="create-btn" data-page="create">
+  <button class="create-btn" data-page="create" aria-label="إنشاء">
     +
   </button>
-
-  <button data-page="notifications">
-    <span>♡</span>
-    التنبيهات
+  <button data-page="chat">
+    <span>💬</span>
+    الدردشات
   </button>
-
-  <button data-page="schedule">
-    <span>☰</span>
-    الجدول
+  <button data-page="profile">
+    <span>●</span>
+    الملف
   </button>
-
 </nav>
 
 <aside id="drawer">
@@ -69,7 +64,7 @@
   </div>
 
   <div class="drawer-profile">
-
+    <div class="drawer-avatar" id="drawerAvatar" aria-hidden="true">⚖</div>
     <div>
       <strong id="drawerName">زائر</strong>
       <small id="drawerRole">Guest</small>
