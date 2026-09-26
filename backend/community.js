@@ -184,6 +184,10 @@ app.post("/api/posts/:id/comments", requireAuth(async (req, res) => {
             INSERT INTO post_comments (post_id, author_id, body)
             VALUES ($1, $2, $3) RETURNING id, body, created_at
         `, [postId, req.user.id, body]);
+        const owner = await pool.query("SELECT author_id FROM posts WHERE id = $1", [postId]);
+        if (owner.rows.length && Number(owner.rows[0].author_id) !== Number(req.user.id)) {
+            await createMemberNotification({ recipientId: owner.rows[0].author_id, actorId: req.user.id, kind: "comment", title: "تعليق جديد على منشورك", body, source: "member", referenceType: "post", referenceId: postId });
+        }
 
         res.status(201).json({
             ok: true,
