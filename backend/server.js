@@ -6,9 +6,10 @@ const path = require("path");
 const crypto = require("crypto");
 
 const app = express();
+const { createOwnerRouter } = require("./routes/ownerRoutes");
 
 app.use(cors());
-app.use(express.json({ limit: "12mb" }));
+app.use(express.json({ limit: "12mb" }));\n\napp.use("/api/owner", createOwnerRouter(pool));
 
 const PORT = process.env.PORT || 3000;
 
