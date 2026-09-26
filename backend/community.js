@@ -5,6 +5,16 @@ function normalizeSection(value) {
     return allowed.includes(section) ? section : null;
 }
 
+function sanitizeRichHTML(value) {
+    const html=String(value||"").slice(0,50000);
+    return html
+      .replace(/<(?!\/?(?:p|div|br|strong|b|em|i|u|s|h1|h2|h3|blockquote|ul|ol|li|span|a)(?:\s[^>]*)?>)[^>]*>/gi,"")
+      .replace(/\s(?:style|class|id|on\w+|href|src)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,(m)=>/^\sstyle\s*=/.test(m) ? m.replace(/url\s*\([^)]*\)/gi,"") : (m.trim().toLowerCase().startsWith("href") ? " href=\"#" : ""));
+}
+function normalizeHashtags(value) {
+    return [...new Set((Array.isArray(value)?value:[]).map(x=>String(x||"").trim().replace(/^#/,"").replace(/[^\p{L}\p{N}_-]/gu,"").slice(0,40)).filter(Boolean))].slice(0,12);
+}
+
 function validateImageDataUrl(value) {
     if (value === undefined || value === null || value === "") return true;
     return typeof value === "string" &&
@@ -29,6 +39,9 @@ async function serializePost(row) {
         section: row.section,
         title: row.title,
         body: row.body,
+        body_html: row.body_html || null,
+        content_type: row.content_type || "post",
+        hashtags: row.hashtags || [],
         image_url: row.image_url,
         is_pinned: row.is_pinned,
         created_at: row.created_at,
@@ -68,7 +81,7 @@ app.get("/api/posts", async (req, res) => {
         const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
 
         const result = await pool.query(`
-            SELECT p.id, p.section, p.title, p.body, p.image_url,
+            SELECT p.id, p.section, p.title, p.body, p.body_html, p.content_type, p.hashtags, p.image_url,
                    p.is_pinned, p.created_at, p.updated_at,
                    u.id AS author_id, u.full_name AS author_name,
                    u.avatar_url AS author_avatar, u.profile_slug AS author_slug,
@@ -99,6 +112,9 @@ app.post("/api/posts", requireAuth(async (req, res) => {
         const section = normalizeSection(req.body.section || "community");
         const title = req.body.title == null ? null : String(req.body.title).trim();
         const body = String(req.body.body || "").trim();
+        const bodyHtml = req.body.body_html ? sanitizeRichHTML(req.body.body_html) : null;
+        const contentType = ["post","article"].includes(String(req.body.content_type||"post")) ? String(req.body.content_type||"post") : "post";
+        const hashtags = normalizeHashtags(req.body.hashtags);
         const imageUrl = req.body.image_url || null;
 
         if (!section) return res.status(400).json({ ok: false, message: "Invalid section." });
@@ -107,15 +123,15 @@ app.post("/api/posts", requireAuth(async (req, res) => {
         if (!validateImageDataUrl(imageUrl)) return res.status(400).json({ ok: false, message: "Invalid or oversized image." });
 
         const result = await pool.query(`
-            INSERT INTO posts (author_id, section, title, body, image_url)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO posts (author_id, section, title, body, body_html, content_type, hashtags, image_url)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
-        `, [req.user.id, section, title || null, body, imageUrl]);
+        `, [req.user.id, section, title || null, body, bodyHtml, contentType, hashtags, imageUrl]);
 
         await pool.query(`
             INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
             VALUES ($1, 'post.created', 'post', $2, $3::jsonb)
-        `, [req.user.id, result.rows[0].id, JSON.stringify({ section, has_image: !!imageUrl })]);
+        `, [req.user.id, result.rows[0].id, JSON.stringify({ section, content_type: contentType, hashtags, has_image: !!imageUrl })]);
         const notificationSource = section === "announcements" ? "announcement" : ((req.user.role === "admin" || req.user.role === "owner") ? "admin" : "member");
         await notifyActiveMembers({
             actorId: req.user.id,
@@ -129,7 +145,7 @@ app.post("/api/posts", requireAuth(async (req, res) => {
         });
 
         const postResult = await pool.query(`
-            SELECT p.id, p.section, p.title, p.body, p.image_url,
+            SELECT p.id, p.section, p.title, p.body, p.body_html, p.content_type, p.hashtags, p.image_url,
                    p.is_pinned, p.created_at, p.updated_at,
                    u.id AS author_id, u.full_name AS author_name,
                    u.avatar_url AS author_avatar, u.profile_slug AS author_slug,
