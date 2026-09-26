@@ -1495,7 +1495,7 @@ async function page(p, profileIdentifier = null){
     app.innerHTML=`
       <div class="chat-app">
         <aside class="chat-list card">
-          <div class="chat-list-head"><h2>الدردشات</h2><button class="chat-new-btn" id="newChat">＋</button></div>
+          <div class="chat-list-head"><h2>الدردشات</h2></div>
           <input id="chatSearch" class="chat-search" placeholder="بحث...">
           <div id="chatList"><div class="empty">جارٍ التحميل...</div></div>
         </aside>
