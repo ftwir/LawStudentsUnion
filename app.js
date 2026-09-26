@@ -549,7 +549,11 @@ function bindPostEvents(container,section){
 }
 
 async function renderHome(){
-  app.innerHTML='<section class="community-cover"></section><section class="community-info"><div class="community-avatar">⚖</div><h1>اتحاد طلبة كلية القانون</h1><p>المساحة الرسمية للطلبة: أخبار، فعاليات، دراسة، منشورات وحوار.</p><div class="community-stats"><div><strong>اتحاد</strong><span>المجتمع الرسمي</span></div><div><strong>طلاب</strong><span>تواصل ومشاركة</span></div><div><strong id="onlineCount">—</strong><span>متصل الآن</span></div></div></section><nav class="community-tabs" aria-label="أقسام الاتحاد"><button class="active" data-page="home">الرئيسية</button><button data-page="announcements">الإعلانات</button><button data-page="activities">الأنشطة والفعاليات</button><button data-page="schedule">الجدول</button></nav><div class="home-welcome"><h2>مساحة الاتحاد</h2><p>اكتشف ما يحدث داخل المجتمع وشارك زملاءك دون تحويل الصفحة الرئيسية إلى ملف شخصي.</p></div><div class="section-title"><h2>آخر منشورات المجتمع</h2><span>Community Feed</span></div><div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>';
+  let site = {};
+  try { const r = await fetch(API+'/api/app-settings',{cache:'no-store'}); const x = await r.json(); site = x.settings || {}; } catch(e) {}
+  const siteTitle = site.home_title || 'اتحاد طلبة كلية القانون';
+  const siteIntro = site.home_intro || 'المساحة الرسمية للطلبة: أخبار، فعاليات، دراسة، منشورات وحوار.';
+  app.innerHTML='<section class="community-cover"></section><section class="community-info"><div class="community-avatar">⚖</div><h1>${escapeHTML(siteTitle)}</h1><p>${escapeHTML(siteIntro)}</p><div class="community-stats"><div><strong>اتحاد</strong><span>المجتمع الرسمي</span></div><div><strong>طلاب</strong><span>تواصل ومشاركة</span></div><div><strong id="onlineCount">—</strong><span>متصل الآن</span></div></div></section><nav class="community-tabs" aria-label="أقسام الاتحاد"><button class="active" data-page="home">الرئيسية</button><button data-page="announcements">الإعلانات</button><button data-page="activities">الأنشطة والفعاليات</button><button data-page="schedule">الجدول</button></nav><div class="home-welcome"><h2>مساحة الاتحاد</h2><p>اكتشف ما يحدث داخل المجتمع وشارك زملاءك دون تحويل الصفحة الرئيسية إلى ملف شخصي.</p></div><div class="section-title"><h2>آخر منشورات المجتمع</h2><span>Community Feed</span></div><div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>';
   app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
   app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
   const count=await getOnlineCount();const el=document.querySelector('#onlineCount');if(el)el.textContent=count;
@@ -776,7 +780,11 @@ async function renderManagementPage(target){
     }
 
     if(target === 'settings'){
-      app.innerHTML='<div class="section-title"><h2>إعدادات النظام</h2><span>Owner</span></div><article class="card"><h3>إعدادات النظام</h3><p>الإعدادات الحساسة تبقى في بيئة الخادم. لا يتم عرض أسرار الاتصال أو بيانات المالك داخل واجهة الأعضاء.</p></article>';
+      const r = await fetch(API+'/api/app-settings',{cache:'no-store'});
+      const payload = await r.json();
+      const settings = payload.settings || {};
+      app.innerHTML='<div class="section-title"><h2>إعدادات النظام</h2><span>Owner</span></div><form class="card form" id="ownerSiteSettings"><label>عنوان الصفحة الرئيسية<input name="home_title" value="'+escapeHTML(settings.home_title || 'اتحاد طلبة كلية القانون')+'"></label><label>وصف الصفحة الرئيسية<textarea name="home_intro">'+escapeHTML(settings.home_intro || '')+'</textarea></label><label>عنوان قسم عن المجتمع<input name="about_title" value="'+escapeHTML(settings.about_title || 'اتحاد طلبة كلية القانون')+'"></label><label>نص قسم عن المجتمع<textarea name="about_body">'+escapeHTML(settings.about_body || '')+'</textarea></label><button class="btn">حفظ التغييرات</button><div id="ownerSiteStatus"></div></form>';
+      document.querySelector('#ownerSiteSettings').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());const response=await fetch(API+'/api/app-settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify(data)});const result=await response.json();document.querySelector('#ownerSiteStatus').innerHTML=response.ok&&result.ok?'<span class="success">تم حفظ النصوص.</span>':'<span class="error">'+escapeHTML(result.message||'تعذر الحفظ.')+'</span>';};
       return;
     }
 
@@ -1278,14 +1286,7 @@ async function page(p, profileIdentifier = null){
 
       <article class="card">
 
-        <h3>
-          اتحاد طلبة كلية القانون
-        </h3>
-
-        <p>
-          مجتمع طلابي للتواصل ومتابعة الأخبار
-          والأنشطة والفعاليات والمناقشات.
-        </p>
+        <h3 id="aboutTitle">اتحاد طلبة كلية القانون</h3><p id="aboutBody">مجتمع طلابي للتواصل ومتابعة الأخبار والأنشطة والفعاليات والمناقشات.</p>
 
       </article>
 
