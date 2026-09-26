@@ -1476,3 +1476,7 @@ main,.feed,.home-shell{scroll-margin-top:110px}
 .creation-hub:not(.open){pointer-events:none !important}
 .chat-modal[hidden]{display:none !important;pointer-events:none !important}
 #shade:not(.open){display:none !important;pointer-events:none !important}
+
+/* Global interaction hardening */
+button,[data-page]{pointer-events:auto;}
+#shade:not(.open),.creation-hub:not(.open),.chat-modal[hidden]{pointer-events:none !important;}
