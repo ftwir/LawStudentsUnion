@@ -1350,9 +1350,9 @@ async function page(p, profileIdentifier = null){
         const response = await fetch(API+'/api/membership/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         const data = await response.json();
         if(!response.ok||!data.ok) throw new Error(data.message||'تعذر إرسال الطلب.');
-        status.innerHTML='<span class="success">تم إرسال طلب العضوية بنجاح. رقم الطلب: '+escapeHTML(String(data.application.id))+'<br>سيتم نقلك إلى الصفحة الرئيسية...</span>';
+        status.innerHTML='<span class="success">تم إرسال طلب العضوية بنجاح. رقم الطلب: '+escapeHTML(String(data.application.id))+'<br>تم حفظ طلبك بنجاح. يمكنك العودة إلى الصفحة الرئيسية عندما تريد.</span><br><button type="button" class="btn secondary" id="membershipHomeButton">العودة إلى الصفحة الرئيسية</button>';
         form.querySelectorAll('input,select,textarea,button').forEach(el=>el.disabled=true);
-        setTimeout(()=>page('home'),900);
+        document.querySelector('#membershipHomeButton')?.addEventListener('click',()=>page('home'));
       }catch(error){
         status.innerHTML='<span class="error">'+escapeHTML(error.message)+'</span>';
       }
@@ -1599,6 +1599,7 @@ async function page(p, profileIdentifier = null){
       </div>`;
     const thisChatView=++chatViewId;
     let conversations=[],active=null,selected=[];
+    let chatInputEditing=false;
     const list=document.querySelector('#chatList'),messages=document.querySelector('#chatMessages');
     async function loadConversations(){
       const rr=await fetch(API+'/api/chat/conversations',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
@@ -1667,6 +1668,10 @@ async function page(p, profileIdentifier = null){
     imageInput.onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('اختر صورة أقل من 5MB.');e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{chatImageData=rd.result;chatAudioData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🖼️ صورة مرفقة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment').onclick=()=>{chatImageData=null;imageInput.value='';imagePreview.innerHTML='';};};rd.readAsDataURL(file);};
     document.querySelector('#chatVoiceButton').onclick=async()=>{if(voiceRecorder&&voiceRecorder.state==='recording'){voiceRecorder.stop();return;}if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){alert('تسجيل الصوت غير مدعوم في هذا المتصفح.');return;}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});voiceChunks=[];voiceRecorder=new MediaRecorder(stream);voiceRecorder.ondataavailable=e=>{if(e.data.size)voiceChunks.push(e.data);};voiceRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(voiceChunks,{type:voiceRecorder.mimeType||'audio/webm'});if(blob.size>1600000){alert('الرسالة الصوتية كبيرة جداً. سجل مقطعاً أقصر.');return;}const rd=new FileReader();rd.onload=()=>{chatAudioData=rd.result;chatImageData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🎙️ رسالة صوتية جاهزة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment').onclick=()=>{chatAudioData=null;imagePreview.innerHTML='';};};rd.readAsDataURL(blob);document.querySelector('#chatVoiceButton').textContent='🎙';};voiceRecorder.start();document.querySelector('#chatVoiceButton').textContent='⏹';}catch(error){alert('تعذر الوصول إلى الميكروفون. تأكد من السماح بالميكروفون.');}};
     const chatForm=document.querySelector('#chatForm');
+    const chatBodyInput=chatForm?.elements?.body;
+    chatBodyInput?.addEventListener('focus',()=>{chatInputEditing=true;});
+    chatBodyInput?.addEventListener('blur',()=>{chatInputEditing=false;});
+    chatBodyInput?.addEventListener('input',()=>{chatInputEditing=Boolean(String(chatBodyInput.value||'').trim());});
     if(chatForm)chatForm.addEventListener('submit',async e=>{
       e.preventDefault();
       e.stopPropagation();
@@ -1736,7 +1741,9 @@ document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChat
       if(document.visibilityState!=='visible'||!active)return;
       try{
         await loadConversations();
-        if(active)await openChat(active.id,true);
+        if(!active)return;
+        if(chatInputEditing || document.activeElement===chatBodyInput) return;
+        await openChat(active.id,true);
       }catch(e){}
     },5000);
     return;
