@@ -91,7 +91,7 @@ const moduleExports = function(app, pool, requireAuth) {
   }));
 
   app.get("/api/chat/conversations", requireAuth(async (req,res)=>{
-    const r=await pool.query("SELECT DISTINCT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_at,c.host_user_id,c.messaging_paused,c.voice_room_active,COALESCE((SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1),'') AS last_message,(SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$1 WHERE (c.is_private=FALSE OR cm.user_id IS NOT NULL) ORDER BY last_message_at DESC NULLS LAST,c.created_at DESC",[req.user.id]);
+    const r=await pool.query("SELECT DISTINCT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_at,c.host_user_id,c.messaging_paused,c.voice_room_active,COALESCE(cm.is_muted,FALSE) AS is_muted,COALESCE(cm.inbox_position_at,c.created_at) AS inbox_position_at,COALESCE((SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1),'') AS last_message,(SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$1 WHERE (c.is_private=FALSE OR cm.user_id IS NOT NULL) ORDER BY CASE WHEN COALESCE(cm.is_muted,FALSE) THEN COALESCE(cm.inbox_position_at,c.created_at) ELSE COALESCE((SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1),c.created_at) END DESC",[req.user.id]);
     const conversations=[];
     for(const c of r.rows){
       const members=await pool.query("SELECT u.id,u.full_name,u.avatar_url,u.profile_slug,cm.role AS membership_role FROM conversation_members cm JOIN users u ON u.id=cm.user_id WHERE cm.conversation_id=$1 ORDER BY CASE cm.role WHEN 'host' THEN 0 WHEN 'cohost' THEN 1 ELSE 2 END,u.full_name",[c.id]);
@@ -123,6 +123,22 @@ const moduleExports = function(app, pool, requireAuth) {
     const conversation=created.rows[0];
     for(const id of ids) await pool.query("INSERT INTO conversation_members(conversation_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(conversation_id,user_id) DO UPDATE SET role=EXCLUDED.role",[conversation.id,id,type==="direct"?"member":(id===Number(req.user.id)?"host":"member")]);
     res.status(201).json({ok:true,conversation});
+  }));
+
+  app.patch("/api/chat/conversations/:id/mute", requireAuth(async (req,res)=>{
+    const id=Number(req.params.id);
+    if(!Number.isInteger(id)) return res.status(400).json({ok:false,message:"Invalid conversation."});
+    const accessRow=await access(id,Number(req.user.id));
+    if(!accessRow) return res.status(403).json({ok:false,message:"لا تملك صلاحية الوصول إلى هذه الدردشة."});
+    const muted=Boolean(req.body.muted);
+    await pool.query(
+      `UPDATE conversation_members
+       SET is_muted=$1,
+           inbox_position_at=CASE WHEN $1 THEN COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id=$2), inbox_position_at, joined_at) ELSE COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id=$2), inbox_position_at, joined_at) END
+       WHERE conversation_id=$2 AND user_id=$3`,
+      [muted,id,req.user.id]
+    );
+    res.json({ok:true,is_muted:muted});
   }));
 
   app.get("/api/chat/conversations/:id/details", requireAuth(async (req,res)=>{
