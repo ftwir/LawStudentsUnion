@@ -1533,7 +1533,6 @@ async function page(p, profileIdentifier = null){
     return;
 
   }
-}
 
 
 async function renderProfileEditor(user){
