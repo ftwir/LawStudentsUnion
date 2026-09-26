@@ -1359,3 +1359,30 @@ main{padding-top:0}
 .creation-hub.open .creation-hub-card{transform:translateY(0) scale(1)}.creation-hub-close{position:absolute;left:16px;top:14px;width:38px;height:38px;border:1px solid var(--line);border-radius:50%;background:var(--surface2);color:inherit;font-size:24px;cursor:pointer}.creation-hub-icon{width:54px;height:54px;border-radius:18px;display:grid;place-items:center;background:var(--accent);color:#fff;font-size:31px;box-shadow:0 10px 28px #0003}.creation-hub-card h3{margin:18px 0 6px;font-size:22px}.creation-hub-card>p{margin:0 0 20px;opacity:.65}.creation-hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.creation-hub-grid button{border:1px solid var(--line);border-radius:18px;background:var(--surface2);color:inherit;padding:18px;text-align:right;display:grid;grid-template-columns:auto 1fr;column-gap:12px;cursor:pointer;transition:.2s}.creation-hub-grid button:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 12px 28px #0002}.creation-hub-grid span{grid-row:1/3;font-size:28px}.creation-hub-grid strong{font-size:15px}.creation-hub-grid small{opacity:.62;margin-top:4px}
 .chat-list-head .chat-new-btn{display:none}
 @media(max-width:700px){.create-type-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.create-chat-choice,.creation-hub-grid{grid-template-columns:1fr}.creation-hub-card{padding:24px 18px}}
+
+/* Interactive community additions */
+.drawer-profile{cursor:pointer;touch-action:pan-y}
+.chat-modal{background:#0005;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);opacity:0;visibility:hidden;transition:opacity .18s ease,visibility .18s ease}
+.chat-modal.open{opacity:1;visibility:visible}
+.chat-modal-card{transform:translateY(14px) scale(.96);transition:transform .2s cubic-bezier(.2,.8,.2,1);background:color-mix(in srgb,var(--surface) 84%,transparent);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid #ffffff1c;box-shadow:0 28px 80px #0008}
+.chat-modal.open .chat-modal-card{transform:translateY(0) scale(1)}
+.profile-friends-card{margin-top:16px}
+.profile-friends-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.profile-friend{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:16px;background:var(--surface2);color:inherit;padding:10px;text-align:right;cursor:pointer}
+.profile-friend-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;overflow:hidden;background:var(--surface3);display:grid;place-items:center}
+.profile-friend-avatar img{width:100%;height:100%;object-fit:cover}
+.profile-friend span:last-child{min-width:0}
+.profile-friend strong,.profile-friend small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-friend small{font-size:10px;color:var(--muted);margin-top:3px}
+.online-hub-card{max-width:760px;margin:0 auto}
+.online-hub-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.online-hub-head strong,.online-hub-head small{display:block}.online-hub-head small{color:var(--muted);margin-top:4px}
+.live-pill{font-size:10px;padding:7px 10px;border-radius:999px;background:#20c99718;color:#52e0ad;border:1px solid #52e0ad33}
+.online-hub-list{display:grid;gap:7px;margin-top:10px}
+.online-user{display:flex;align-items:center;gap:11px;width:100%;border:1px solid transparent;border-radius:16px;background:transparent;color:inherit;padding:10px;text-align:right;cursor:pointer;transition:.18s}
+.online-user:hover{background:var(--surface2);border-color:var(--line)}
+.online-avatar{position:relative;width:46px;height:46px;flex:0 0 46px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;overflow:visible}
+.online-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.online-avatar i{position:absolute;right:-1px;bottom:0;width:12px;height:12px;border-radius:50%;background:#35d399;border:2px solid var(--surface)}
+.online-user-copy{min-width:0;flex:1}.online-user-copy strong,.online-user-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.online-user-copy small{color:var(--muted);font-size:11px;margin-top:3px}.online-arrow{font-size:24px;color:var(--muted)}
+@media(max-width:700px){.profile-friends-list{grid-template-columns:1fr}.creation-hub-card{width:min(94vw,560px);padding:22px}.creation-hub-grid{grid-template-columns:1fr 1fr}.bottom-nav button:last-child{font-size:8px}}
