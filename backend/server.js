@@ -228,7 +228,9 @@ app.post("/api/auth/login", async (req, res) => {
             password
         } = req.body;
 
-        if (!identifier || !password) {
+        const normalizedIdentifier = String(identifier || "").trim();
+
+        if (!normalizedIdentifier || !password) {
             return res.status(400).json({
                 ok: false,
                 message: "Identifier and password are required."
@@ -254,11 +256,11 @@ app.post("/api/auth/login", async (req, res) => {
                 is_active,
                 last_seen_at
              FROM users
-             WHERE student_id = $1
-                OR email = $1
-                OR phone = $1
+             WHERE TRIM(student_id) = $1
+                OR LOWER(TRIM(COALESCE(email, ''))) = LOWER($1)
+                OR regexp_replace(COALESCE(phone, ''), '[^0-9+]', '', 'g') = regexp_replace($1, '[^0-9+]', '', 'g')
              LIMIT 1`,
-            [identifier]
+            [normalizedIdentifier]
         );
 
         if (result.rows.length === 0) {
