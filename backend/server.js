@@ -974,6 +974,52 @@ app.get("/api/app-settings", async (req, res) => {
 });
 
 require("./community")(app, pool, requireAuth, requireRoles, getAuthenticatedUser);
+require("./social")(app, pool, requireAuth);
+
+
+app.patch("/api/user-notifications/:id/read", requireAuth(async (req,res)=>{
+    const id=Number(req.params.id);
+    if(!Number.isInteger(id)) return res.status(400).json({ok:false,message:"Invalid notification."});
+    await pool.query("UPDATE user_notifications SET is_read=TRUE WHERE id=$1 AND recipient_id=$2",[id,req.user.id]);
+    res.json({ok:true});
+}));
+
+app.post("/api/user-notifications/read-all", requireAuth(async (req,res)=>{
+    await pool.query("UPDATE user_notifications SET is_read=TRUE WHERE recipient_id=$1",[req.user.id]);
+    res.json({ok:true});
+}));
+
+app.post("/api/membership/activate", async (req,res)=>{
+    try{
+        const studentId=String(req.body.student_id||"").trim();
+        const phone=String(req.body.phone||"").trim();
+        const password=String(req.body.password||"");
+        if(!studentId||!phone||password.length<8) return res.status(400).json({ok:false,message:"رقم القيد والهاتف وكلمة مرور من 8 أحرف مطلوبة."});
+        const existing=await pool.query("SELECT id FROM users WHERE student_id=$1 LIMIT 1",[studentId]);
+        if(existing.rows.length) return res.status(409).json({ok:false,message:"يوجد حساب مفعل بهذا الرقم. استخدم تسجيل الدخول."});
+        const r=await pool.query("SELECT * FROM registrations WHERE student_id=$1 AND status='approved' ORDER BY id DESC LIMIT 1",[studentId]);
+        if(!r.rows.length) return res.status(404).json({ok:false,message:"لم يتم العثور على عضوية مقبولة بهذا الرقم."});
+        const a=r.rows[0];
+        const cleanPhone=phone.replace(/[^0-9+]/g,"");
+        const registeredPhone=String(a.phone||"").replace(/[^0-9+]/g,"");
+        if(cleanPhone!==registeredPhone) return res.status(403).json({ok:false,message:"رقم الهاتف لا يطابق طلب العضوية المقبول."});
+        const passwordHash=await hashPassword(password);
+        const created=await pool.query(
+          `INSERT INTO users(full_name,student_id,email,phone,academic_year,password_hash,role,is_active,profile_slug,last_seen_at)
+           VALUES($1,$2,$3,$4,$5,$6,'member',TRUE,'u-'||nextval('users_id_seq'),NULL)
+           RETURNING id,full_name,student_id,email,phone,academic_year,bio,avatar_url,profile_background_url,profile_slug,privacy_settings,notification_settings,role,is_active,created_at,last_login,last_seen_at`,
+          [a.full_name,a.student_id,a.email||null,a.phone,a.academic_year,passwordHash]
+        );
+        const user=created.rows[0];
+        await pool.query("UPDATE registrations SET user_id=$1 WHERE id=$2",[user.id,a.id]);
+        const token=createSessionToken();
+        await pool.query("INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[user.id,hashToken(token)]);
+        res.status(201).json({ok:true,message:"تم تفعيل العضوية وإنشاء الحساب.",token,user:publicUser(user)});
+    }catch(error){
+        console.error(error);
+        res.status(500).json({ok:false,message:"تعذر تفعيل العضوية."});
+    }
+});
 
 app.get("/api/auth-test", (req, res) => {
     res.send(`
