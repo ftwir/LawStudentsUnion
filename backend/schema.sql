@@ -181,13 +181,6 @@ CREATE TABLE IF NOT EXISTS conversation_members (
 ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'member';
 ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS inbox_position_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-UPDATE conversation_members cm
-SET inbox_position_at = COALESCE(
-  (SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id = cm.conversation_id),
-  cm.joined_at,
-  NOW()
-)
-WHERE cm.inbox_position_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_conversation_members_user ON conversation_members(user_id, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_members_role ON conversation_members(conversation_id, role);
 UPDATE conversations
@@ -216,6 +209,13 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url TEXT;
+UPDATE conversation_members cm
+SET inbox_position_at = COALESCE(
+  (SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id = cm.conversation_id),
+  cm.joined_at,
+  NOW()
+)
+WHERE cm.inbox_position_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGSERIAL PRIMARY KEY,
