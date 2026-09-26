@@ -553,8 +553,30 @@ async function renderHome(){
   try { const r = await fetch(API+'/api/app-settings',{cache:'no-store'}); const x = await r.json(); site = x.settings || {}; } catch(e) {}
   const siteTitle = site.home_title || 'اتحاد طلبة كلية القانون';
   const siteIntro = site.home_intro || 'المساحة الرسمية للطلبة: أخبار، فعاليات، دراسة، منشورات وحوار.';
-  app.innerHTML='<section class="community-cover"></section><section class="community-info"><div class="community-avatar">⚖</div><h1>${escapeHTML(siteTitle)}</h1><p>${escapeHTML(siteIntro)}</p><div class="community-stats"><div><strong>اتحاد</strong><span>المجتمع الرسمي</span></div><div><strong>طلاب</strong><span>تواصل ومشاركة</span></div><div><strong id="onlineCount">—</strong><span>متصل الآن</span></div></div></section><nav class="community-tabs" aria-label="أقسام الاتحاد"><button class="active" data-page="home">الرئيسية</button><button data-page="announcements">الإعلانات</button><button data-page="activities">الأنشطة والفعاليات</button><button data-page="schedule">الجدول</button></nav><div class="home-welcome"><h2>مساحة الاتحاد</h2><p>اكتشف ما يحدث داخل المجتمع وشارك زملاءك دون تحويل الصفحة الرئيسية إلى ملف شخصي.</p></div><div class="section-title"><h2>آخر منشورات المجتمع</h2><span>Community Feed</span></div><div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>';
-  app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
+  app.innerHTML=`
+    <div class="home-shell">
+      <section class="home-hero">
+        <div class="home-hero-mark">⚖</div>
+        <div class="home-hero-copy">
+          <span class="home-eyebrow">اتحاد طلبة كلية القانون</span>
+          <h1>${escapeHTML(siteTitle)}</h1>
+          <p>${escapeHTML(siteIntro)}</p>
+        </div>
+      </section>
+      <nav class="community-tabs" aria-label="أقسام الاتحاد">
+        <button class="active" data-page="home">الرئيسية</button>
+        <button data-page="announcements">الإعلانات</button>
+        <button data-page="activities">الأنشطة والفعاليات</button>
+        <button data-page="schedule">الجدول</button>
+      </nav>
+      <section class="home-welcome">
+        <h2>مرحباً بك في مجتمع الاتحاد</h2>
+        <p>تابع الإعلانات والأنشطة والجدول وشارك زملاءك من مكان واحد.</p>
+      </section>
+      <div class="section-title"><h2>آخر ما نشره المجتمع</h2><span>Community</span></div>
+      <div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>
+    </div>`;
+
   app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
   const count=await getOnlineCount();const el=document.querySelector('#onlineCount');if(el)el.textContent=count;
   await refreshPostsIn(document.querySelector('#homePosts'),'community');
@@ -1343,7 +1365,7 @@ async function page(p, profileIdentifier = null){
         <article class="card profile-card">
           <div class="profile-actions">
             <button class="btn" id="copyProfileBtn">🔗 نسخ رابط الملف</button>
-            ${isSelf ? '<button class="btn secondary" id="editProfileBtn">✎ تعديل الملف</button>' : ''}
+            ${isSelf ? '<button class="btn secondary" id="editProfileBtn">✎ تعديل الملف</button>' : '<button class="btn" id="friendBtn">إضافة صديق</button>'}
           </div>
 
           <div class="profile-field">
@@ -1381,8 +1403,23 @@ async function page(p, profileIdentifier = null){
         () => copyProfileLink(user);
 
       if(isSelf){
-        document.querySelector('#editProfileBtn').onclick =
-          () => renderProfileEditor(user);
+        document.querySelector('#editProfileBtn').onclick = () => renderProfileEditor(user);
+      }else{
+        const fb=document.querySelector('#friendBtn');
+        try{
+          const fr=await fetch(API+'/api/friends/status/'+user.id,{headers:{Authorization:'Bearer '+getToken()}});
+          const fx=await fr.json();
+          if(fx.status==='friends'){fb.textContent='✓ صديق';fb.disabled=true;}
+          else if(fx.status==='pending_sent'){fb.textContent='تم إرسال الطلب';fb.disabled=true;}
+          else if(fx.status==='pending_received'){fb.textContent='قبول طلب الصداقة';}
+          fb.onclick=async()=>{
+            const path=fx.status==='pending_received'?'/api/friends/'+user.id+'/accept':'/api/friends/'+user.id+'/request';
+            const rr=await fetch(API+path,{method:'POST',headers:{Authorization:'Bearer '+getToken()}});
+            const xx=await rr.json();
+            if(!rr.ok||!xx.ok){alert(xx.message||'تعذر تحديث الصداقة.');return;}
+            fb.textContent=xx.status==='friends'?'✓ صديق':'تم إرسال الطلب';fb.disabled=true;
+          };
+        }catch(e){}
       }
 
     }catch(error){
@@ -1399,7 +1436,26 @@ async function page(p, profileIdentifier = null){
   }
 
 
-  if(p === 'chat'){
+  if(p === 'notifications'){
+    if(!currentUser){page('login');return;}
+    app.innerHTML=`<div class="section-title"><h2>الإشعارات</h2><button class="btn secondary" id="readAllNotifications">تحديد الكل كمقروء</button></div><div class="notification-layout"><section class="card" id="notificationList">جارٍ التحميل...</section><section class="card notification-settings-card"><h3>إعدادات الإشعارات</h3><label><input type="checkbox" id="nsAll"> كل الأعضاء</label><label><input type="checkbox" id="nsAdmin"> الإدارة</label><label><input type="checkbox" id="nsFriends"> الأصدقاء</label><label><input type="checkbox" id="nsAnnouncements"> الإعلانات</label></section></div>`;
+    try{
+      const [nr,sr]=await Promise.all([
+        fetch(API+'/api/user-notifications',{headers:{Authorization:'Bearer '+getToken()}}),
+        fetch(API+'/api/notifications/settings',{headers:{Authorization:'Bearer '+getToken()}})
+      ]);
+      const n=await nr.json(), st=await sr.json();
+      const list=document.querySelector('#notificationList');
+      list.innerHTML=(n.notifications||[]).length?(n.notifications||[]).map(x=>`<button class="notification-card ${x.is_read?'read':''}" data-notification-id="${x.id}"><strong>${escapeHTML(x.title)}</strong><span>${escapeHTML(x.body||'')}</span><small>${escapeHTML(new Date(x.created_at).toLocaleString('ar-LY'))}</small></button>`).join(''):'<div class="empty">لا توجد إشعارات.</div>';
+      const settings=st.settings||{}; for(const [id,key] of [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']]) document.querySelector('#'+id).checked=settings[key]!==false;
+      list.querySelectorAll('[data-notification-id]').forEach(b=>b.onclick=async()=>{await fetch(API+'/api/user-notifications/'+b.dataset.notificationId+'/read',{method:'PATCH',headers:{Authorization:'Bearer '+getToken()}});b.classList.add('read');updateNotificationDot();});
+      document.querySelector('#readAllNotifications').onclick=async()=>{await fetch(API+'/api/user-notifications/read-all',{method:'POST',headers:{Authorization:'Bearer '+getToken()}});list.querySelectorAll('.notification-card').forEach(x=>x.classList.add('read'));updateNotificationDot();};
+      [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']].forEach(([id,key])=>document.querySelector('#'+id).onchange=async e=>{await fetch(API+'/api/notifications/settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({[key]:e.target.checked})});});
+    }catch(e){document.querySelector('#notificationList').innerHTML='<div class="empty">'+escapeHTML(e.message)+'</div>';}
+    return;
+  }
+
+
     if(!currentUser){ page('login'); return; }
 
     app.innerHTML = `
@@ -1615,6 +1671,10 @@ async function renderProfileEditor(user){
   };
 }
 
+
+function markNotificationsRead(){
+  fetch(API+'/api/user-notifications/read-all',{method:'POST',headers:{Authorization:'Bearer '+getToken()}}).then(()=>updateNotificationDot()).catch(()=>{});
+}
 
 /* =========================
    DRAWER CONTROLS
