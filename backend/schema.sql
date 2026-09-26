@@ -37,6 +37,10 @@ UPDATE users
 SET notification_settings = '{"push":true,"announcements":true,"messages":true}'::jsonb
 WHERE notification_settings IS NULL;
 
+UPDATE users
+SET profile_slug = 'u-' || id
+WHERE profile_slug IS NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_profile_slug ON users(profile_slug) WHERE profile_slug IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_one_owner_only ON users(role) WHERE role = 'owner';
 
