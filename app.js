@@ -1466,7 +1466,7 @@ async function page(p, profileIdentifier = null){
         : '👤';
 
       const background = user.avatar_url
-        ? `style="--profile-bg:url("${escapeHTML(user.avatar_url)}")"`
+        ? `style="--profile-bg:url('${escapeHTML(user.avatar_url)}')"`
         : '';
 
       app.innerHTML = `
