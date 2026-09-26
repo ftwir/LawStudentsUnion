@@ -92,6 +92,8 @@ CREATE TABLE IF NOT EXISTS registrations (
     reviewed_at TIMESTAMPTZ,
     rejection_reason TEXT,
     user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    archived_at TIMESTAMPTZ,
+    archived_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS academic_year VARCHAR(50);
@@ -101,7 +103,10 @@ ALTER TABLE registrations ADD COLUMN IF NOT EXISTS reviewed_by BIGINT REFERENCES
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_registrations_status ON registrations(status);
+CREATE INDEX IF NOT EXISTS idx_registrations_archived ON registrations(archived_at DESC);
 
 CREATE TABLE IF NOT EXISTS posts (
     id BIGSERIAL PRIMARY KEY,
@@ -192,10 +197,14 @@ CREATE TABLE IF NOT EXISTS messages (
     id BIGSERIAL PRIMARY KEY,
     conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    body TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    image_url TEXT,
+    audio_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     is_read BOOLEAN NOT NULL DEFAULT FALSE
 );
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url TEXT;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGSERIAL PRIMARY KEY,
