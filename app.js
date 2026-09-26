@@ -2124,6 +2124,8 @@ function throttle(fn,wait=100){
   window.addEventListener('scroll',onScroll,{passive:true});
 })();
 
+}
+
 /* =========================
    START
 ========================= */
