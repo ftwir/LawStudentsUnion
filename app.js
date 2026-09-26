@@ -1977,3 +1977,73 @@ const drawerProfile=document.querySelector('.drawer-profile');drawerProfile?.add
 })();
 
 
+
+/* =========================
+   POLL ENHANCEMENT MODULE
+========================= */
+(function(){
+  const pollApi=API;
+  let pollTimer=null;
+  function pollTags(value){return String(value||'').split(/[,\s]+/).map(x=>x.replace(/^#/,'').trim()).filter(Boolean).slice(0,12);}
+  function formatRemaining(closesAt){
+    if(!closesAt)return 'مفتوح';
+    const ms=new Date(closesAt).getTime()-Date.now(); if(ms<=0)return 'انتهى التصويت';
+    const total=Math.floor(ms/1000),d=Math.floor(total/86400),h=Math.floor(total%86400/3600),m=Math.floor(total%3600/60),sec=total%60;
+    if(d)return d+' يوم '+h+' ساعة'; if(h)return h+' ساعة '+m+' دقيقة'; if(m)return m+' دقيقة '+sec+' ثانية'; return sec+' ثانية';
+  }
+  function pollSettingsMarkup(){
+    return '<div class="poll-settings-grid"><label>مدة التصويت<select name="duration_minutes"><option value="5">5 دقائق</option><option value="15">15 دقيقة</option><option value="60">ساعة</option><option value="360">6 ساعات</option><option value="1440" selected>يوم</option><option value="4320">3 أيام</option><option value="10080">7 أيام</option><option value="43200">30 يوماً</option></select></label><label>ظهور النتائج<select name="results_visibility"><option value="after_vote" selected>بعد التصويت</option><option value="always">لجميع الأعضاء فوراً</option><option value="after_close">بعد انتهاء التصويت</option><option value="never">لا تعرض النتائج للأعضاء</option></select></label></div><label class="check-row"><input type="checkbox" name="allow_vote_change" checked><span>السماح بتغيير التصويت قبل انتهاء المدة</span></label><label class="check-row"><input type="checkbox" name="anonymous"><span>تصويت مجهول للأعضاء</span></label><div class="poll-notice">سيتم إرسال إشعار تلقائي عند انتهاء التصويت إلى كل من شارك فيه وإلى صاحب الاستفتاء.</div>';
+  }
+  function enhancePollForm(form){
+    if(!form||form.dataset.enhanced==='1')return;
+    form.dataset.enhanced='1';
+    const tags=form.querySelector('input[name="hashtags"]')?.closest('label');
+    if(tags)tags.insertAdjacentHTML('beforebegin',pollSettingsMarkup());
+    form.addEventListener('submit',async e=>{
+      e.preventDefault(); e.stopImmediatePropagation();
+      const status=form.querySelector('#createStatus'),button=form.querySelector('button[type="submit"]'),data=new FormData(form);
+      const options=data.getAll('option').map(x=>String(x).trim()).filter(Boolean);
+      if(options.length<2){if(status)status.textContent='أضف خيارين على الأقل.';return;}
+      if(button){button.disabled=true;button.textContent='جارٍ النشر...';}
+      try{
+        const response=await fetch(pollApi+'/api/polls',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({question:String(data.get('question')||'').trim(),options,hashtags:pollTags(data.get('hashtags')),duration_minutes:Number(data.get('duration_minutes')||1440),allow_vote_change:data.get('allow_vote_change')==='on',anonymous:data.get('anonymous')==='on',results_visibility:String(data.get('results_visibility')||'after_vote')})});
+        const result=await response.json();
+        if(!response.ok||!result.ok)throw new Error(result.message||'تعذر نشر الاستفتاء.');
+        if(status)status.innerHTML='<span class="success">تم نشر الاستفتاء بنجاح.</span>';
+        await loadPolls(); setTimeout(()=>page('home'),250);
+      }catch(error){if(status)status.innerHTML='<span class="error">'+escapeHTML(error.message)+'</span>';}
+      finally{if(button){button.disabled=false;button.textContent='نشر الاستطلاع';}}
+    },true);
+  }
+  function pollCard(p){
+    const results=p.results||[],map=new Map(results.map(x=>[Number(x.option_index),x])),canVote=!p.closed,voted=p.my_vote!==null&&p.my_vote!==undefined;
+    const options=(p.options||[]).map((opt,i)=>{const r=map.get(i),checked=Number(p.my_vote)===i,resultHtml=p.results?'<span class="poll-result-value">'+(r?.count||0)+' · '+(r?.percentage||0)+'%</span>':'';return '<label class="poll-option '+(checked?'selected ':'')+(p.results?'with-results':'')+'"><input type="radio" name="poll-'+p.id+'" value="'+i+'" '+(checked?'checked':'')+' '+(canVote?'':'disabled')+'><span class="poll-option-copy">'+escapeHTML(opt)+'</span>'+resultHtml+'</label>';}).join('');
+    const tags=(p.hashtags||[]).map(t=>'<span class="hashtag">#'+escapeHTML(t)+'</span>').join('');
+    const action=canVote?'<button class="btn poll-vote-btn" data-poll-vote="'+p.id+'">'+(voted&&p.allow_vote_change?'تحديث التصويت':'تصويت')+'</button>':'<span class="poll-closed">انتهى التصويت</span>';
+    return '<article class="poll-card card" data-poll-id="'+p.id+'" data-closes="'+escapeHTML(p.closes_at||'')+'"><div class="poll-card-head"><div><strong>'+escapeHTML(p.author?.full_name||'عضو')+'</strong><small>'+new Date(p.created_at).toLocaleString('ar-LY')+'</small></div><span class="poll-status">'+(p.closed?'منتهٍ':'ينتهي خلال <b class="poll-countdown">'+escapeHTML(formatRemaining(p.closes_at))+'</b>')+'</span></div><h3>'+escapeHTML(p.question)+'</h3>'+(tags?'<div class="hashtags">'+tags+'</div>':'')+'<div class="poll-options">'+options+'</div><div class="poll-footer"><span>'+p.total_votes+' صوت</span>'+action+'</div></article>';
+  }
+  async function bindPollVotes(box){
+    box.querySelectorAll('[data-poll-vote]').forEach(btn=>btn.onclick=async()=>{
+      if(!currentUser){page('login');return;}
+      const card=btn.closest('[data-poll-id]'),selected=card?.querySelector('input[type="radio"]:checked'); if(!selected){alert('اختر خياراً أولاً.');return;}
+      btn.disabled=true;
+      try{const r=await fetch(pollApi+'/api/polls/'+Number(btn.dataset.pollVote)+'/vote',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({option_index:Number(selected.value)})}),x=await r.json();if(!r.ok||!x.ok)throw new Error(x.message||'تعذر تسجيل التصويت.');await loadPolls();}catch(error){alert(error.message);}finally{btn.disabled=false;}
+    });
+  }
+  async function loadPolls(){
+    const hosts=[document.querySelector('#homePosts'),document.querySelector('#postsPageFeed')].filter(Boolean);if(!hosts.length)return;
+    try{
+      const r=await fetch(pollApi+'/api/polls',{headers:getToken()?{Authorization:'Bearer '+getToken()}:{} ,cache:'no-store'}),x=await r.json();if(!r.ok||!x.ok)throw new Error(x.message||'تعذر تحميل الاستفتاءات.');
+      const html=(x.polls||[]).map(pollCard).join('');
+      hosts.forEach(host=>{let box=host.parentElement.querySelector('.poll-feed');if(!box){box=document.createElement('section');box.className='poll-feed';host.parentElement.insertBefore(box,host);}box.innerHTML=html;bindPollVotes(box);});
+    }catch(error){}
+  }
+  function observe(){
+    const observer=new MutationObserver(()=>{const form=document.querySelector('#pollForm');if(form)enhancePollForm(form);if(document.querySelector('#homePosts')||document.querySelector('#postsPageFeed'))loadPolls();});
+    observer.observe(document.body,{childList:true,subtree:true});
+    enhancePollForm(document.querySelector('#pollForm'));loadPolls();
+    if(pollTimer)clearInterval(pollTimer);
+    pollTimer=setInterval(()=>{document.querySelectorAll('.poll-countdown').forEach(el=>{const card=el.closest('[data-poll-id]');if(card)el.textContent=formatRemaining(card.dataset.closes);});},1000);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
+})();
