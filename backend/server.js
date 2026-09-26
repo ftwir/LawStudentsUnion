@@ -907,6 +907,72 @@ app.get("/api/admin/audit-logs", requireRoles("admin", "owner"), async (req, res
     }
 });
 
+
+app.get("/api/notifications/settings", requireAuth(async (req, res) => {
+    const settings = req.user.notification_settings || {};
+    res.json({ ok: true, settings: {
+        all_members: settings.all_members !== false,
+        administration: settings.administration !== false,
+        friends: settings.friends !== false,
+        announcements: settings.announcements !== false,
+        push: settings.push !== false,
+        messages: settings.messages !== false
+    }});
+}));
+
+app.put("/api/notifications/settings", requireAuth(async (req, res) => {
+    const allowed = ["all_members","administration","friends","announcements","push","messages"];
+    const current = req.user.notification_settings || {};
+    const next = { ...current };
+    for (const key of allowed) {
+        if (typeof req.body[key] === "boolean") next[key] = req.body[key];
+    }
+    const result = await pool.query(
+        "UPDATE users SET notification_settings = $1::jsonb WHERE id = $2 RETURNING notification_settings",
+        [JSON.stringify(next), req.user.id]
+    );
+    res.json({ ok: true, settings: result.rows[0].notification_settings });
+}));
+
+app.get("/api/user-notifications", requireAuth(async (req, res) => {
+    const settings = req.user.notification_settings || {};
+    const rows = await pool.query(
+        `SELECT n.*, u.full_name AS actor_name, u.avatar_url AS actor_avatar
+         FROM user_notifications n
+         LEFT JOIN users u ON u.id = n.actor_id
+         WHERE n.recipient_id = $1
+           AND (
+             (n.source = 'member' AND $2::boolean)
+             OR (n.source = 'admin' AND $3::boolean)
+             OR (n.source = 'friend' AND $4::boolean)
+             OR (n.source = 'announcement' AND $5::boolean)
+           )
+         ORDER BY n.created_at DESC LIMIT 100`,
+        [req.user.id, settings.all_members !== false, settings.administration !== false, settings.friends !== false, settings.announcements !== false]
+    );
+    res.json({ ok: true, notifications: rows.rows });
+}));
+
+app.put("/api/app-settings", requireRoles("owner"), async (req, res) => {
+    const entries = req.body && typeof req.body === "object" ? req.body : {};
+    for (const [key, value] of Object.entries(entries)) {
+        if (!/^[a-zA-Z0-9_.-]{1,120}$/.test(key)) continue;
+        await pool.query(
+            `INSERT INTO app_settings (key, value, updated_by) VALUES ($1, $2::jsonb, $3)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+            [key, JSON.stringify(value), req.user.id]
+        );
+    }
+    res.json({ ok: true });
+});
+
+app.get("/api/app-settings", async (req, res) => {
+    const result = await pool.query("SELECT key, value FROM app_settings ORDER BY key");
+    const settings = {};
+    for (const row of result.rows) settings[row.key] = row.value;
+    res.json({ ok: true, settings });
+});
+
 require("./community")(app, pool, requireAuth, requireRoles, getAuthenticatedUser);
 
 app.get("/api/auth-test", (req, res) => {
