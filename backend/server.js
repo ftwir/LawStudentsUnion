@@ -3,6 +3,7 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 
@@ -22,6 +23,62 @@ const pool = new Pool({
         ? { rejectUnauthorized: false }
         : false
 });
+
+function hashPassword(password) {
+    return new Promise((resolve, reject) => {
+        const salt = crypto.randomBytes(16).toString("hex");
+
+        crypto.scrypt(password, salt, 64, (error, derivedKey) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+
+            resolve(`${salt}:${derivedKey.toString("hex")}`);
+        });
+    });
+}
+
+function verifyPassword(password, storedHash) {
+    return new Promise((resolve, reject) => {
+        const parts = storedHash.split(":");
+
+        if (parts.length !== 2) {
+            resolve(false);
+            return;
+        }
+
+        const salt = parts[0];
+        const storedKey = Buffer.from(parts[1], "hex");
+
+        crypto.scrypt(password, salt, 64, (error, derivedKey) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+
+            if (storedKey.length !== derivedKey.length) {
+                resolve(false);
+                return;
+            }
+
+            resolve(
+                crypto.timingSafeEqual(storedKey, derivedKey)
+            );
+        });
+    });
+}
+
+function createSessionToken() {
+    return crypto.randomBytes(32).toString("hex");
+}
+
+function hashToken(token) {
+    return crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
+}
 
 app.get("/", (req, res) => {
     res.json({
@@ -70,26 +127,206 @@ app.get("/api/test", async (req, res) => {
     }
 });
 
-app.get("/api/tables", async (req, res) => {
+app.post("/api/auth/register", async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_type = 'BASE TABLE'
-            ORDER BY table_name;
-        `);
+        const {
+            full_name,
+            student_id,
+            email,
+            password
+        } = req.body;
 
-        res.json({
+        if (!full_name || !student_id || !password) {
+            return res.status(400).json({
+                ok: false,
+                message: "Full name, student ID and password are required."
+            });
+        }
+
+        if (password.length < 8) {
+            return res.status(400).json({
+                ok: false,
+                message: "Password must contain at least 8 characters."
+            });
+        }
+
+        const existingUser = await pool.query(
+            `SELECT id
+             FROM users
+             WHERE student_id = $1
+                OR ($2::text IS NOT NULL AND email = $2)
+             LIMIT 1`,
+            [student_id, email || null]
+        );
+
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({
+                ok: false,
+                message: "A user with this student ID or email already exists."
+            });
+        }
+
+        const passwordHash = await hashPassword(password);
+
+        const result = await pool.query(
+            `INSERT INTO users
+                (full_name, student_id, email, password_hash)
+             VALUES
+                ($1, $2, $3, $4)
+             RETURNING
+                id, full_name, student_id, email, role, is_active, created_at`,
+            [
+                full_name,
+                student_id,
+                email || null,
+                passwordHash
+            ]
+        );
+
+        res.status(201).json({
             ok: true,
-            tables: result.rows.map(row => row.table_name)
+            message: "Account created successfully.",
+            user: result.rows[0]
         });
     } catch (error) {
         console.error(error);
 
         res.status(500).json({
             ok: false,
-            message: "Could not read database tables."
+            message: "Could not create account."
+        });
+    }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+    try {
+        const {
+            identifier,
+            password
+        } = req.body;
+
+        if (!identifier || !password) {
+            return res.status(400).json({
+                ok: false,
+                message: "Identifier and password are required."
+            });
+        }
+
+        const result = await pool.query(
+            `SELECT
+                id,
+                full_name,
+                student_id,
+                email,
+                password_hash,
+                role,
+                is_active
+             FROM users
+             WHERE student_id = $1
+                OR email = $1
+             LIMIT 1`,
+            [identifier]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(401).json({
+                ok: false,
+                message: "Invalid login credentials."
+            });
+        }
+
+        const user = result.rows[0];
+
+        if (!user.is_active) {
+            return res.status(403).json({
+                ok: false,
+                message: "This account is disabled."
+            });
+        }
+
+        const passwordCorrect = await verifyPassword(
+            password,
+            user.password_hash
+        );
+
+        if (!passwordCorrect) {
+            return res.status(401).json({
+                ok: false,
+                message: "Invalid login credentials."
+            });
+        }
+
+        const sessionToken = createSessionToken();
+        const tokenHash = hashToken(sessionToken);
+
+        await pool.query(
+            `INSERT INTO sessions
+                (user_id, token_hash, expires_at)
+             VALUES
+                ($1, $2, NOW() + INTERVAL '30 days')`,
+            [user.id, tokenHash]
+        );
+
+        await pool.query(
+            `UPDATE users
+             SET last_login = NOW()
+             WHERE id = $1`,
+            [user.id]
+        );
+
+        res.json({
+            ok: true,
+            message: "Login successful.",
+            token: sessionToken,
+            user: {
+                id: user.id,
+                full_name: user.full_name,
+                student_id: user.student_id,
+                email: user.email,
+                role: user.role,
+                is_active: user.is_active
+            }
+        });
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            ok: false,
+            message: "Login failed."
+        });
+    }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+    try {
+        const authorization = req.headers.authorization || "";
+
+        if (!authorization.startsWith("Bearer ")) {
+            return res.json({
+                ok: true,
+                message: "Logged out."
+            });
+        }
+
+        const token = authorization.substring(7);
+        const tokenHash = hashToken(token);
+
+        await pool.query(
+            `DELETE FROM sessions
+             WHERE token_hash = $1`,
+            [tokenHash]
+        );
+
+        res.json({
+            ok: true,
+            message: "Logged out successfully."
+        });
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            ok: false,
+            message: "Logout failed."
         });
     }
 });
@@ -105,9 +342,13 @@ async function initializeDatabase() {
 
         await pool.query(schema);
 
-        console.log("Database schema initialized successfully.");
+        console.log(
+            "Database schema initialized successfully."
+        );
     } catch (error) {
-        console.error("Database initialization failed:");
+        console.error(
+            "Database initialization failed:"
+        );
         console.error(error);
         process.exit(1);
     }
