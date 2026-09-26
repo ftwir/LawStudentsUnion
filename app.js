@@ -822,7 +822,7 @@ async function renderManagementPage(target){
         (channels.length?channels.map(c=>'<button class="admin-user-row private-channel-row" data-private-chat="'+c.id+'"><div><strong>'+escapeHTML(c.name||'محادثة خاصة')+'</strong><small>'+escapeHTML(c.type==='group'?'مجموعة خاصة':'محادثة خاصة')+' · '+(c.member_count||0)+' أعضاء</small></div><span class="tag">خاصة</span></button>').join(''):'<div class="empty">لا توجد قنوات خاصة بعد.</div>')+
         '</div>';
       document.querySelector('#ownerCreatePrivateChat')?.addEventListener('click',async()=>{await page('chat');requestAnimationFrame(()=>openCreateChatModal('group'));});
-      document.querySelectorAll('[data-private-chat]').forEach(b=>b.onclick=async()=>{await page('chat');requestAnimationFrame(async()=>{await loadChatListAndOpen(Number(b.dataset.privateChat));});});
+      document.querySelectorAll('[data-private-chat]').forEach(b=>b.onclick=async()=>{await page('chat');});
       return;
     }
 
