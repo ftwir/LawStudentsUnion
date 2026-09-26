@@ -60,6 +60,9 @@ app.get("/api/posts", async (req, res) => {
     try {
         const section = normalizeSection(req.query.section || "community");
         if (!section) return res.status(400).json({ ok: false, message: "Invalid section." });
+        if (section === "announcements" && !["admin", "owner"].includes(req.user.role)) {
+            return res.status(403).json({ ok: false, message: "Announcements are restricted." });
+        }
 
         const viewer = await getAuthenticatedUser(req);
         const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
