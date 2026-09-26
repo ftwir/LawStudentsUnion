@@ -2103,7 +2103,7 @@ function throttle(fn,wait=100){
       await page('posts');
       requestAnimationFrame(()=>{
         const target=document.querySelector('.post[data-post-id="'+CSS.escape(postId)+'"]');
-        if(target){target.scrollIntoView({behavior:'smooth',block:'center');target.classList.add('hash-target');setTimeout(()=>target.classList.remove('hash-target'),1800);}
+        if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.add('hash-target');setTimeout(()=>target.classList.remove('hash-target'),1800);}
       });
       return;
     }
