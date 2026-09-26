@@ -636,7 +636,7 @@ app.put("/api/profile", requireAuth(async (req, res) => {
             }
         }
 
-        if (email && !/^\\S+@\\S+\\.\\S+$/.test(email)) {
+        if (email && !/^\S+@\S+\.\S+$/.test(email)) {
             return res.status(400).json({
                 ok: false,
                 message: "Invalid email address."
