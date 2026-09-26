@@ -84,6 +84,12 @@ const moduleExports = function(app, pool, requireAuth) {
     res.json({ok:true,users:r.rows});
   }));
 
+  app.get("/api/chat/private-channels", requireAuth(async (req,res)=>{
+    if(!["owner","admin"].includes(req.user.role)) return res.status(403).json({ok:false,message:"غير مصرح."});
+    const r=await pool.query("SELECT c.id,c.name,c.type,c.is_private,c.created_at,COUNT(cm.user_id)::int AS member_count FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id WHERE c.is_private=TRUE GROUP BY c.id ORDER BY c.created_at DESC");
+    res.json({ok:true,conversations:r.rows});
+  }));
+
   app.get("/api/chat/conversations", requireAuth(async (req,res)=>{
     const r=await pool.query("SELECT DISTINCT c.id,c.name,c.type,c.is_private,c.created_at,COALESCE((SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1),'') AS last_message,(SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$1 WHERE (c.is_private=FALSE OR cm.user_id IS NOT NULL) ORDER BY last_message_at DESC NULLS LAST,c.created_at DESC",[req.user.id]);
     const conversations=[];
