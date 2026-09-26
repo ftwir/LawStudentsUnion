@@ -149,6 +149,8 @@ CREATE INDEX IF NOT EXISTS idx_posts_section_date ON posts(section, created_at D
 CREATE INDEX IF NOT EXISTS idx_posts_pinned ON posts(is_pinned, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at);
 
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS name VARCHAR(150);
+
 CREATE TABLE IF NOT EXISTS conversations (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(150),
