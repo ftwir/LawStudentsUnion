@@ -1692,9 +1692,12 @@ async function renderProfileEditor(user){
       }
 
       currentUser = result.user;
+      await heartbeat();
+      const fresh = await loadPublicProfile(currentUser.profile_slug || currentUser.id);
+      currentUser = {...currentUser, ...fresh};
       updateDrawer();
       status.innerHTML = '<span class="success">تم حفظ الملف الشخصي بنجاح.</span>';
-      setTimeout(() => page('profile', currentUser.profile_slug || currentUser.id), 500);
+      setTimeout(() => page('profile', fresh.profile_slug || fresh.id), 250);
 
     }catch(error){
       status.innerHTML = '<span class="error">'+escapeHTML(error.message)+'</span>';
