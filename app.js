@@ -5,6 +5,7 @@ const app = document.querySelector('#app');
 let currentUser = null;
 let currentPageName='home';
 let chatPollTimer=null;
+let onlineHubTimer=null;
 
 /* =========================
    AUTH
@@ -845,7 +846,7 @@ async function renderManagementPage(target){
 }
 
 async function page(p, profileIdentifier = null){
-  currentPageName=p;if(p!=='chat'&&chatPollTimer){clearInterval(chatPollTimer);chatPollTimer=null;}heartbeat();
+  currentPageName=p;if(p!=='chat'&&chatPollTimer){clearInterval(chatPollTimer);chatPollTimer=null;}if(p!=='online-hub'&&onlineHubTimer){clearInterval(onlineHubTimer);onlineHubTimer=null;}heartbeat();
 
   document
     .querySelectorAll(
@@ -1346,6 +1347,22 @@ async function page(p, profileIdentifier = null){
     return;
   }
 
+
+  if(p === 'online-hub'){
+    if(!currentUser){page('login');return;}
+    app.innerHTML='<div class="section-title"><h2>Online Hub</h2><span>النشطون الآن</span></div><section class="card online-hub-card"><div class="online-hub-head"><div><strong>من موجود الآن؟</strong><small>يتحدث أو يقرأ أو يتصفح المجتمع الآن</small></div><span class="live-pill">● LIVE</span></div><div id="onlineHubList" class="online-hub-list"><div class="empty">جارٍ التحميل...</div></div></section>';
+    async function loadOnlineHub(){
+      try{
+        const r=await fetch(API+'/api/presence/online-hub',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),x=await r.json();
+        const list=document.querySelector('#onlineHubList');if(!list)return;
+        const labels={home:'الرئيسية',announcements:'الإعلانات',activities:'الأنشطة والفعاليات',schedule:'الجدول',chat:'الدردشة',posts:'المنشورات',create:'الإنشاء',profile:'الملف الشخصي','online-hub':'Online Hub'};
+        const users=x.users||[];
+        list.innerHTML=users.length?users.map(u=>'<button class="online-user" data-profile="'+escapeHTML(u.profile_slug||u.id)+'"><span class="online-avatar">'+(u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'" alt="">':'👤')+'<i></i></span><span class="online-user-copy"><strong>'+escapeHTML(u.full_name)+'</strong><small>نشط في '+escapeHTML(labels[u.current_page]||'التطبيق')+'</small></span><span class="online-arrow">‹</span></button>').join(''):'<div class="empty">لا يوجد أعضاء نشطون الآن.</div>';
+        list.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>openProfile(b.dataset.profile));
+      }catch(e){}
+    }
+    await loadOnlineHub();onlineHubTimer=setInterval(loadOnlineHub,4000);return;
+  }
 
   if(p === 'profile'){
 
