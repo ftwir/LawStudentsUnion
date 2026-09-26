@@ -483,6 +483,11 @@ async function fetchPosts(section){
   return result.posts||[];
 }
 
+function richPostBody(post){
+  if(post.content_type==='article' && post.body_html) return post.body_html;
+  return '<p>'+escapeHTML(post.body||'').replaceAll('\\n','<br>')+'</p>';
+}
+function hashtagsHTML(tags){return (tags||[]).map(t=>'<span class="hashtag">#'+escapeHTML(t)+'</span>').join('');}
 function postHTML(post){
   const avatar=post.author&&post.author.avatar_url?'<img src="'+escapeHTML(post.author.avatar_url)+'" alt="">':'👤';
   const comments=(post.comments||[]).slice(-3).map(c=>'<div class="comment"><strong>'+escapeHTML(c.author?.full_name||'عضو')+'</strong><span>'+escapeHTML(c.body)+'</span></div>').join('');
@@ -490,7 +495,7 @@ function postHTML(post){
   const own=currentUser&&Number(currentUser.id)===Number(post.author?.id);
   return '<article class="post" data-post-id="'+post.id+'">'+
     '<div class="post-head"><button class="post-author-link" data-profile="'+escapeHTML(post.author?.profile_slug||post.author?.id||'')+'"><span class="post-avatar">'+avatar+'</span><span class="post-author"><strong>'+escapeHTML(post.author?.full_name||'عضو الاتحاد')+'</strong><small>'+escapeHTML(new Date(post.created_at).toLocaleString('ar-LY'))+'</small></span></button>'+(post.is_pinned?'<span class="tag">مثبت</span>':'')+'</div>'+
-    '<div class="post-body">'+(post.title?'<h3>'+escapeHTML(post.title)+'</h3>':'')+'<p>'+escapeHTML(post.body).replaceAll('\\n','<br>')+'</p>'+(post.image_url?'<img class="post-image" src="'+escapeHTML(post.image_url)+'" alt="صورة المنشور" loading="lazy">':'')+'</div>'+
+    '<div class="post-body">'+(post.title?'<h3>'+escapeHTML(post.title)+'</h3>':'')+richPostBody(post)+(post.hashtags?.length?'<div class="hashtags">'+hashtagsHTML(post.hashtags)+'</div>':'')+(post.image_url?'<img class="post-image" src="'+escapeHTML(post.image_url)+'" alt="صورة المنشور" loading="lazy">':'')+'</div>'+
     '<div class="post-actions"><button data-action="report">⚑</button><button data-action="like" class="'+(post.liked_by_me?'active':'')+'">♥ <span>'+post.likes_count+'</span></button><button data-action="focus-comment">💬 <span>'+post.comments_count+'</span></button><button data-action="share">↗ مشاركة</button>'+(manager?'<button data-action="pin">'+(post.is_pinned?'إلغاء التثبيت':'تثبيت')+'</button>':'')+((own||manager)?'<button data-action="delete">حذف</button>':'')+'</div>'+
     '<div class="comments">'+comments+(currentUser?'<form class="comment-form"><input name="body" maxlength="2000" placeholder="اكتب تعليقاً..." required><button>إرسال</button></form>':'<small>سجل الدخول للتعليق والإعجاب.</small>')+'</div></article>';
 }
@@ -649,28 +654,20 @@ async function renderCreatePost(){
      <button class="create-type" data-type="poll"><span>◉</span><strong>استفتاء</strong><small>اسأل مجتمع الطلبة</small></button>
      <button class="create-type" data-type="article"><span>▤</span><strong>مقال</strong><small>اكتب محتوى متكاملاً</small></button>
      <button class="create-type" data-type="chat"><span>◌</span><strong>دردشة</strong><small>خاصة أو غرفة جماعية</small></button>
-   </div>
-   <article class="card" id="createBox"></article>`;
+   </div><article class="card" id="createBox"></article>`;
   const box=document.querySelector('#createBox');
+  const tags=v=>String(v||'').split(/[,\\s]+/).map(x=>x.replace(/^#/,'').trim()).filter(Boolean).slice(0,12);
+  const imagePicker=`<label class="image-picker" for="postImageInput"><span>▧</span><strong>إضافة صورة</strong><small>PNG · JPG · WEBP · GIF حتى 5MB</small></label><input id="postImageInput" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><div id="postImagePreview"></div>`;
+  const toolbar=`<div class="editor-toolbar"><button type="button" data-cmd="bold"><b>B</b></button><button type="button" data-cmd="italic"><i>I</i></button><button type="button" data-cmd="underline"><u>U</u></button><button type="button" data-cmd="formatBlock" data-value="h2">H</button><button type="button" data-cmd="formatBlock" data-value="blockquote">❝</button><button type="button" data-cmd="justifyRight">⇥</button><button type="button" data-cmd="justifyLeft">⇤</button><button type="button" data-cmd="insertUnorderedList">•</button><button type="button" data-cmd="insertOrderedList">1.</button><label class="editor-color">A<input type="color" id="editorColor" value="#9b88ff"></label></div>`;
+  function bindEditor(){const ed=document.querySelector('#richEditor');if(!ed)return;ed.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>{ed.focus();document.execCommand(b.dataset.cmd,false,b.dataset.value||null);});document.querySelector('#editorColor')?.addEventListener('input',x=>{ed.focus();document.execCommand('foreColor',false,x.target.value);});}
+  function bindImage(){const input=document.querySelector('#postImageInput');if(!input)return;input.onchange=x=>{const f=x.target.files?.[0];if(!f)return;if(f.size>5000000){alert('الصورة يجب ألا تتجاوز 5MB.');x.target.value='';return;}const rd=new FileReader();rd.onload=()=>document.querySelector('#postImagePreview').innerHTML='<img class="post-image create-image-preview" src="'+escapeHTML(rd.result)+'">';rd.readAsDataURL(f);};}
   function render(type){
     document.querySelectorAll('.create-type').forEach(b=>b.classList.toggle('active',b.dataset.type===type));
-    if(type==='chat'){ box.innerHTML=`<div class="create-chat-choice">
-      <button class="create-chat-option" id="createPrivateChat"><span>◉</span><strong>دردشة خاصة</strong><small>محادثة مباشرة مع عضو</small></button>
-      <button class="create-chat-option" id="createGroupChat"><span>◎</span><strong>غرفة جماعية</strong><small>اجمع عدة أعضاء في غرفة واحدة</small></button>
-    </div>`;
-      document.querySelector('#createPrivateChat').onclick=()=>openCreateChatModal('direct');
-      document.querySelector('#createGroupChat').onclick=()=>openCreateChatModal('group');
-      return;
-    }
-    if(type==='poll'){
-      box.innerHTML=`<form class="form" id="pollForm"><label>السؤال<textarea name="question" rows="3" required placeholder="ما رأيك؟"></textarea></label><div id="pollOptions"><input name="option" placeholder="الخيار 1" required><input name="option" placeholder="الخيار 2" required></div><button type="button" class="btn secondary" id="addOption">+ إضافة خيار</button><button class="btn">نشر الاستطلاع</button><div id="createStatus"></div></form>`;
-      document.querySelector('#addOption').onclick=()=>{const wrap=document.querySelector('#pollOptions');if(wrap.children.length<8){const i=document.createElement('input');i.name='option';i.placeholder='خيار جديد';wrap.appendChild(i);}};
-      document.querySelector('#pollForm').onsubmit=async e=>{e.preventDefault();const d=new FormData(e.currentTarget),options=d.getAll('option');const rr=await fetch(API+'/api/polls',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({question:d.get('question'),options})}),x=await rr.json();if(!rr.ok||!x.ok){document.querySelector('#createStatus').textContent=x.message||'تعذر النشر.';return;}page('home');};
-      return;
-    }
-    box.innerHTML=`<form class="form" id="createPostForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>${type==='article'?'عنوان المقال':'العنوان (اختياري)'}<input name="title" maxlength="255" ${type==='article'?'required':''}></label><label>المحتوى<textarea name="body" maxlength="10000" rows="8" required placeholder="${type==='article'?'اكتب مقالك هنا...':'شارك شيئاً مع مجتمع الاتحاد...'}"></textarea></label><label>صورة<input id="postImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><div id="postImagePreview"></div><button class="btn">نشر ${type==='article'?'المقال':'المنشور'}</button><div id="createStatus"></div></form>`;
-    let imageData=null;document.querySelector('#postImageInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('الصورة يجب ألا تتجاوز 5MB.');return;}const rd=new FileReader();rd.onload=()=>{imageData=rd.result;document.querySelector('#postImagePreview').innerHTML='<img class="post-image" src="'+escapeHTML(imageData)+'">';};rd.readAsDataURL(file);};
-    document.querySelector('#createPostForm').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));const rr=await fetch(API+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({section:d.section,title:d.title,body:d.body,image_url:imageData})}),x=await rr.json();if(!rr.ok||!x.ok){document.querySelector('#createStatus').textContent=x.message||'تعذر النشر.';return;}page('home');};
+    if(type==='chat'){box.innerHTML=`<div class="create-chat-choice"><button class="create-chat-option" id="createPrivateChat"><span>◉</span><strong>دردشة خاصة</strong><small>محادثة فردية متكافئة بلا مضيف</small></button><button class="create-chat-option" id="createGroupChat"><span>◎</span><strong>غرفة جماعية</strong><small>أنت تصبح المضيف تلقائياً</small></button></div>`;document.querySelector('#createPrivateChat').onclick=()=>openCreateChatModal('direct');document.querySelector('#createGroupChat').onclick=()=>openCreateChatModal('group');return;}
+    if(type==='poll'){box.innerHTML=`<form class="form" id="pollForm"><label>السؤال<textarea name="question" rows="3" required placeholder="ما رأيك؟"></textarea></label><div id="pollOptions"><input name="option" placeholder="الخيار 1" required><input name="option" placeholder="الخيار 2" required></div><button type="button" class="btn secondary" id="addOption">+ إضافة خيار</button><label>الهاشتاقات<input name="hashtags" placeholder="#اتحاد #دراسة #قانون"></label><button class="btn">نشر الاستطلاع</button><div id="createStatus"></div></form>`;document.querySelector('#addOption').onclick=()=>{const w=document.querySelector('#pollOptions');if(w.children.length<8){const i=document.createElement('input');i.name='option';i.placeholder='خيار جديد';w.appendChild(i);}};document.querySelector('#pollForm').onsubmit=async ev=>{ev.preventDefault();const d=new FormData(ev.currentTarget),rr=await fetch(API+'/api/polls',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({question:d.get('question'),options:d.getAll('option'),hashtags:tags(d.get('hashtags'))})}),x=await rr.json();if(!rr.ok||!x.ok){document.querySelector('#createStatus').textContent=x.message||'تعذر النشر.';return;}page('home');};return;}
+    if(type==='article'){box.innerHTML=`<form class="form" id="createPostForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>عنوان المقال<input name="title" maxlength="255" required></label><label>محتوى المقال${toolbar}<div id="richEditor" class="rich-editor" contenteditable="true"></div></label><label>الهاشتاقات<input name="hashtags" placeholder="#قانون #دراسة #اتحاد"></label>${imagePicker}<button class="btn">نشر المقال</button><div id="createStatus"></div></form>`;bindEditor();bindImage();}
+    else{box.innerHTML=`<form class="form" id="createPostForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>العنوان (اختياري)<input name="title" maxlength="255"></label><label>المحتوى<textarea name="body" maxlength="10000" rows="8" required placeholder="شارك شيئاً مع مجتمع الاتحاد..."></textarea></label><label>الهاشتاقات<input name="hashtags" placeholder="#اتحاد #كلية_القانون"></label>${imagePicker}<button class="btn">نشر المنشور</button><div id="createStatus"></div></form>`;bindImage();}
+    document.querySelector('#createPostForm').onsubmit=async ev=>{ev.preventDefault();const form=ev.currentTarget,d=new FormData(form),ed=document.querySelector('#richEditor'),body=ed?ed.innerText.trim():String(d.get('body')||'').trim();if(!body)return;const bodyHtml=ed?ed.innerHTML:null,file=document.querySelector('#postImageInput')?.files?.[0];const send=async imageData=>{const rr=await fetch(API+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({section:d.get('section'),title:d.get('title'),body,body_html:bodyHtml,content_type:type,hashtags:tags(d.get('hashtags')),image_url:imageData})}),x=await rr.json();if(!rr.ok||!x.ok)throw new Error(x.message||'تعذر النشر.');page('home');};try{if(file){const rd=new FileReader();rd.onload=()=>send(rd.result).catch(x=>document.querySelector('#createStatus').textContent=x.message);rd.readAsDataURL(file);}else await send(null);}catch(x){document.querySelector('#createStatus').textContent=x.message;}};};
   }
   document.querySelectorAll('.create-type').forEach(b=>b.onclick=()=>render(b.dataset.type));render('post');
 }
@@ -1523,7 +1520,7 @@ async function page(p, profileIdentifier = null){
         <section class="chat-window card">
           <div id="chatEmpty" class="chat-empty"><strong>دردشات الاتحاد</strong><span>اختر محادثة أو أنشئ محادثة جديدة.</span></div>
           <div id="chatActive" hidden>
-            <header class="chat-window-head"><div><strong id="chatTitle"></strong><small id="chatSubtitle"></small></div></header>
+            <header class="chat-window-head"><div><strong id="chatTitle"></strong><small id="chatSubtitle"></small><div id="chatTags" class="hashtags"></div></div><button id="chatManageBtn" class="chat-manage-btn" type="button">إدارة</button></header>
             <div id="chatMessages" class="chat-messages"></div>
             <form id="chatForm" class="chat-compose"><input name="body" autocomplete="off" maxlength="4000" placeholder="اكتب رسالة..."><button>➤</button></form>
           </div>
@@ -1534,6 +1531,9 @@ async function page(p, profileIdentifier = null){
           <button class="modal-close" id="closeChatModal" type="button" aria-label="إغلاق">×</button><h3 id="chatModalTitle">محادثة جديدة</h3>
           <label>النوع<select id="chatType"><option value="direct">خاصة — عضو مع عضو</option><option value="group">خاصة — عدة أعضاء</option><option value="public">عامة — قناة</option></select></label>
           <label id="chatNameWrap">اسم القناة أو المجموعة<input id="chatName" maxlength="120"></label>
+          <label id="chatDescriptionWrap">وصف الدردشة<textarea id="chatDescription" maxlength="1000" rows="3" placeholder="وصف مختصر للدردشة"></textarea></label>
+          <label id="chatHashtagsWrap">الهاشتاقات<input id="chatHashtags" placeholder="#دراسة #اتحاد"></label>
+          <label id="chatCoverWrap" class="image-picker compact-image-picker" for="chatCover">▧ <strong>صورة غلاف الدردشة</strong><small>اختيارية</small></label><input id="chatCover" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><div id="chatCoverPreview"></div>
           <label>اختيار الأعضاء<input id="chatMembersSearch" placeholder="ابحث بالاسم أو رقم القيد"></label>
           <div id="chatUsers"></div><button class="btn" id="createChatBtn">إنشاء</button>
         </div>
@@ -1557,7 +1557,7 @@ async function page(p, profileIdentifier = null){
         const title=c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة';
         return !q || title.toLowerCase().includes(q) || String(c.last_message||'').toLowerCase().includes(q);
       });
-      list.innerHTML=visible.length?visible.map(c=>{const canDelete=role()==='owner'||(role()==='admin'&&c.type==='public')||(c.is_private&&c.members?.some(m=>Number(m.id)===Number(currentUser.id)));return `<div class="chat-row-wrap"><button class="chat-row ${active&&Number(active.id)===Number(c.id)?'active':''}" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>${canDelete?`<button class="chat-delete-btn" type="button" data-delete-chat="${c.id}" aria-label="حذف الدردشة">حذف</button>`:''}</div>`;}).join(''):'<div class="empty">لا توجد محادثات مطابقة.</div>';
+      list.innerHTML=visible.length?visible.map(c=>{const canDelete=role()==='owner'||(role()==='admin'&&c.type==='public')||(c.type==='direct'&&c.is_private&&c.members?.some(m=>Number(m.id)===Number(currentUser.id)))||(c.type!=='direct'&&Number(c.host_user_id)===Number(currentUser.id));return `<div class="chat-row-wrap"><button class="chat-row ${active&&Number(active.id)===Number(c.id)?'active':''}" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>${canDelete?`<button class="chat-delete-btn" type="button" data-delete-chat="${c.id}" aria-label="حذف الدردشة">حذف</button>`:''}</div>`;}).join(''):'<div class="empty">لا توجد محادثات مطابقة.</div>';
       list.querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.cid)));
       list.querySelectorAll('[data-delete-chat]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const id=Number(b.dataset.deleteChat);const c=conversations.find(x=>Number(x.id)===id);if(!c)return;if(!confirm('سيتم حذف الدردشة ورسائلها نهائياً لجميع المشاركين. هل تريد المتابعة؟'))return;b.disabled=true;try{const rr=await fetch(API+'/api/chat/conversations/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر حذف الدردشة.');if(active&&Number(active.id)===id){active=null;document.querySelector('#chatEmpty').hidden=false;document.querySelector('#chatActive').hidden=true;}await loadConversations();}catch(error){alert(error.message);}finally{b.disabled=false;}});
     }
@@ -1565,7 +1565,7 @@ async function page(p, profileIdentifier = null){
       active=conversations.find(c=>Number(c.id)===id);if(!active)return;
       document.querySelector('#chatEmpty').hidden=true;document.querySelector('#chatActive').hidden=false;
       document.querySelector('#chatTitle').textContent=active.name||active.members.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ');
-      document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.members.length+' أعضاء';
+      document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.type==='direct'?'محادثة خاصة':active.members.length+' أعضاء'+(active.messaging_paused?' · الإرسال متوقف':'');document.querySelector('#chatTags').innerHTML=hashtagsHTML(active.hashtags||[]);const manage=document.querySelector('#chatManageBtn');manage.style.display=active.type==='direct'?'none':'block';manage.onclick=()=>openChatManagement(active);
       const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       const wasNearBottom=messages.scrollHeight-messages.scrollTop-messages.clientHeight<100;
       messages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble ${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>${escapeHTML(m.sender.full_name)}</small><div>${escapeHTML(m.body)}</div><time>${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
@@ -1584,19 +1584,19 @@ document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChat
       memberLabel.style.display=type==='public'?'none':'block';
       document.querySelector('#chatUsers').style.display=type==='public'?'none':'grid';
       document.querySelector('#chatModalTitle').textContent=type==='group'?'إنشاء مجموعة خاصة':type==='direct'?'محادثة خاصة':'إنشاء قناة عامة';
-      document.querySelector('#chatName').placeholder=type==='public'?'مثال: قناة الأنشطة':'اسم المجموعة';
+      document.querySelector('#chatName').placeholder=type==='public'?'مثال: قناة الأنشطة':'اسم المجموعة';document.querySelector('#chatDescriptionWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatHashtagsWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatCoverWrap').style.display=type==='direct'?'none':'flex';
     };
     async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
-    document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
+    document.querySelector('#chatCover')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{document.querySelector('#chatCoverPreview').innerHTML='<img class="post-image create-image-preview" src="'+escapeHTML(rd.result)+'">';document.querySelector('#chatCover').dataset.data=rd.result;};rd.readAsDataURL(f);});document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
     document.querySelector('#createChatBtn').onclick=async()=>{
       const type=document.querySelector('#chatType').value;
-      const name=document.querySelector('#chatName').value.trim();
+      const name=document.querySelector('#chatName').value.trim();const description=document.querySelector('#chatDescription')?.value.trim()||'';const hashtags=String(document.querySelector('#chatHashtags')?.value||'').split(/[,\s]+/).filter(Boolean);
       if(type==='direct' && selected.length!==1){alert('اختر عضواً واحداً لإنشاء محادثة خاصة.');return;}
       if(type!=='direct' && !name){alert('اكتب اسم الدردشة أولاً.');return;}
       if(type==='group' && selected.length<1){alert('اختر عضواً واحداً على الأقل للمجموعة.');return;}
       const button=document.querySelector('#createChatBtn');button.disabled=true;button.textContent='جارٍ الإنشاء...';
       try{
-        const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name,member_ids:selected})});
+        const rr=await fetch(API+'/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({type,name,description,hashtags,cover_image_url:document.querySelector('#chatCover')?.dataset.data||null,member_ids:selected})});
         const xx=await rr.json();
         if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر إنشاء المحادثة.');
         closeCreateChatModal();selected=[];await loadConversations();await openChat(Number(xx.conversation.id));
@@ -1770,8 +1770,28 @@ async function renderProfileEditor(user){
 }
 
 
+async function openChatManagement(chat){
+  if(!chat)return;
+  const rr=await fetch(API+'/api/chat/conversations/'+chat.id+'/details',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),x=await rr.json();
+  if(!rr.ok||!x.ok){alert(x.message||'تعذر تحميل إدارة الدردشة.');return;}
+  const d=x.conversation, me=d.my_role, canHost=Number(d.host_user_id)===Number(currentUser.id), canCo=canHost||me==='cohost';
+  const modal=document.createElement('div');modal.className='chat-manage-modal';
+  modal.innerHTML=`<div class="chat-manage-card"><button class="modal-close" type="button">×</button><div class="manage-hero"><div><h3>إدارة الدردشة</h3><small>${canHost?'أنت المضيف':me==='cohost'?'أنت co-host':'عضو'}</small></div></div>
+    <form id="chatMetaForm" class="form"><label>اسم الدردشة<input name="name" value="${escapeHTML(d.name||'')}"></label><label>الوصف<textarea name="description">${escapeHTML(d.description||'')}</textarea></label><label>الهاشتاقات<input name="hashtags" value="${escapeHTML((d.hashtags||[]).map(t=>'#'+t).join(' '))}"></label><label class="image-picker compact-image-picker" for="manageCover">▧ <strong>تغيير صورة الغلاف</strong></label><input id="manageCover" class="visually-hidden" type="file" accept="image/*"><div id="manageCoverPreview"></div><button class="btn">حفظ معلومات الدردشة</button></form>
+    <div class="manage-actions"><button type="button" class="btn secondary" id="pauseChatBtn">${d.messaging_paused?'استئناف الإرسال':'إيقاف الإرسال مؤقتاً'}</button><button type="button" class="btn secondary" id="voiceChatBtn">${d.voice_room_active?'إغلاق غرفة الصوت':'فتح غرفة صوتية'}</button></div>
+    <div class="manage-members"><h4>الأعضاء</h4>${(d.members||[]).map(m=>`<div class="manage-member"><span class="manage-member-avatar">${m.avatar_url?'<img src="'+escapeHTML(m.avatar_url)+'">':'👤'}</span><span><strong>${escapeHTML(m.full_name)}</strong><small>${m.role==='host'?'المضيف':m.role==='cohost'?'Co-host':'عضو'}</small></span><span class="manage-member-actions">${canHost&&m.role==='member'?'<button data-promote="'+m.id+'">ترقية</button>':''}${canHost&&m.role==='cohost'?'<button data-demote="'+m.id+'">تخفيض</button>':''}${canCo&&m.role==='member'?'<button data-kick="'+m.id+'">طرد</button>':''}${canHost&&m.role==='cohost'?'<button data-kick="'+m.id+'">طرد</button>':''}</span></div>`).join('')}</div></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();modal.querySelector('.modal-close').onclick=close;modal.onclick=e=>{if(e.target===modal)close();};
+  let cover=null;document.querySelector('#manageCover').onchange=e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{cover=rd.result;document.querySelector('#manageCoverPreview').innerHTML='<img class="post-image create-image-preview" src="'+escapeHTML(cover)+'">';};rd.readAsDataURL(f);};
+  document.querySelector('#chatMetaForm').onsubmit=async e=>{e.preventDefault();const dta=Object.fromEntries(new FormData(e.currentTarget)),body={name:dta.name,description:dta.description,hashtags:String(dta.hashtags||'').split(/[,\\s]+/).filter(Boolean)};if(cover)body.cover_image_url=cover;const z=await fetch(API+'/api/chat/conversations/'+chat.id,{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify(body)}),j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر الحفظ.');return;}close();await loadConversations();await openChat(chat.id);};
+  modal.querySelector('#pauseChatBtn').onclick=async()=>{const z=await fetch(API+'/api/chat/conversations/'+chat.id+'/pause',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({paused:!d.messaging_paused})});const j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر التغيير.');return;}close();await openChat(chat.id);};
+  modal.querySelector('#voiceChatBtn').onclick=async()=>{const z=await fetch(API+'/api/chat/conversations/'+chat.id+'/voice',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({active:!d.voice_room_active})});const j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر فتح غرفة الصوت.');return;}alert(j.active?'تم فتح غرفة الصوت للدردشة.':'تم إغلاق غرفة الصوت.');close();await openChat(chat.id);};
+  modal.querySelectorAll('[data-promote]').forEach(b=>b.onclick=async()=>{const z=await fetch(API+'/api/chat/conversations/'+chat.id+'/cohosts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({user_id:Number(b.dataset.promote)})});const j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر الترقية.');return;}close();openChatManagement(chat);});
+  modal.querySelectorAll('[data-demote]').forEach(b=>b.onclick=async()=>{const z=await fetch(API+'/api/chat/conversations/'+chat.id+'/cohosts/'+b.dataset.demote,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}});const j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر التخفيض.');return;}close();openChatManagement(chat);});
+  modal.querySelectorAll('[data-kick]').forEach(b=>b.onclick=async()=>{if(!confirm('طرد هذا العضو من الدردشة؟'))return;const z=await fetch(API+'/api/chat/conversations/'+chat.id+'/members/'+b.dataset.kick,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}});const j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر الطرد.');return;}close();openChatManagement(chat);});
+}
 function closeCreateChatModal(){const modal=document.querySelector('#chatModal');if(!modal)return;modal.classList.remove('open');setTimeout(()=>{if(modal)modal.hidden=true;},180);}
-async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;const search=document.querySelector('#chatMembersSearch');const name=document.querySelector('#chatName');if(search)search.value='';if(name)name.value='';select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
+async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;const search=document.querySelector('#chatMembersSearch');const name=document.querySelector('#chatName');const desc=document.querySelector('#chatDescription');const tags=document.querySelector('#chatHashtags');if(search)search.value='';if(name)name.value='';if(desc)desc.value='';if(tags)tags.value='';select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
 function openCreationHub(){
   if(!currentUser){ page('login'); return; }
   const existing=document.querySelector('#creationHub');
@@ -1829,6 +1849,10 @@ function markNotificationsRead(){
    DRAWER CONTROLS
 ========================= */
 
+let drawerTouchStartX=0;
+document.addEventListener('touchstart',e=>{drawerTouchStartX=e.changedTouches[0].clientX;},{passive:true});
+document.addEventListener('touchmove',e=>{if(document.querySelector('#drawer.open'))e.preventDefault();},{passive:false});
+document.addEventListener('touchend',e=>{const end=e.changedTouches[0].clientX,delta=end-drawerTouchStartX,open=document.querySelector('#drawer')?.classList.contains('open');if(open&&delta>60)drawer(false);else if(!open&&drawerTouchStartX>window.innerWidth-32&&delta<-60){updateDrawer();drawer(true);}});
 function drawer(open){
 
   document
@@ -1853,6 +1877,7 @@ async function updateNotificationDot(){
   }catch(e){}
 }
 
+document.documentElement.style.scrollBehavior='smooth';
 document.querySelector('#bottomMenu').onclick=()=>{ updateDrawer(); drawer(true); };
 
 document
