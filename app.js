@@ -1650,7 +1650,7 @@ async function page(p, profileIdentifier = null){
       const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       if(currentPageName!=='chat'||thisChatView!==chatViewId||!document.querySelector('#chatMessages'))return;
       const currentMessages=document.querySelector('#chatMessages');
-      const wasNearBottom=currentMessages.scrollHeight-currentMessages.scrollTop-currentMessages.clientHeight<100;
+      if(!currentMessages)return; const wasNearBottom=currentMessages.scrollHeight-currentMessages.scrollTop-currentMessages.clientHeight<100;
       if(isUserScrolling)return;
       if(!currentMessages)return;
       currentMessages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble ${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>${escapeHTML(m.sender.full_name)}</small>${m.body?`<div>${escapeHTML(m.body)}</div>`:''}${m.image_url?`<img class="chat-media-image" src="${escapeHTML(m.image_url)}" alt="صورة مرسلة" loading="lazy">`:''}${m.audio_url?`<audio class="chat-media-audio" controls preload="metadata" src="${escapeHTML(m.audio_url)}"></audio>`:''}<time>${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
