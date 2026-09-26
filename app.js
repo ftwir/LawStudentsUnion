@@ -7,6 +7,21 @@ let currentPageName='home';
 let chatPollTimer=null;
 let onlineHubTimer=null;
 let pendingChatId=null;
+let isUserScrolling=false;
+let scrollResetTimer=null;
+function markUserScrolling(){
+  isUserScrolling=true;
+  clearTimeout(scrollResetTimer);
+  scrollResetTimer=setTimeout(()=>{isUserScrolling=false;},150);
+}
+function installScrollGuards(){
+  document.querySelectorAll('.feed,.feed-container,.chat-list,#chatList,.chat-list-container').forEach(el=>{
+    if(el.dataset.scrollGuardInstalled==='1')return;
+    el.dataset.scrollGuardInstalled='1';
+    el.addEventListener('scroll',markUserScrolling,{passive:true});
+    el.addEventListener('touchmove',markUserScrolling,{passive:true});
+  });
+}
 
 /* =========================
    AUTH
@@ -504,9 +519,13 @@ async function refreshPostsIn(container,section){
   if(!container)return;
   try{
     const posts=await fetchPosts(section);
+    if(isUserScrolling)return;
     container.innerHTML=posts.length?posts.map(postHTML).join(''):'<div class="empty">لا توجد منشورات هنا بعد. كن أول من يشارك.</div>';
     bindPostEvents(container,section);
-  }catch(error){container.innerHTML='<div class="empty">'+escapeHTML(error.message)+'</div>';}
+    installScrollGuards();
+  }catch(error){
+    if(!isUserScrolling)container.innerHTML='<div class="empty">'+escapeHTML(error.message)+'</div>';
+  }
 }
 
 function bindPostEvents(container,section){
@@ -1559,6 +1578,7 @@ async function page(p, profileIdentifier = null){
       const rr=await fetch(API+'/api/chat/conversations',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر تحميل الدردشات.');
       conversations=xx.conversations||[];
+      if(isUserScrolling)return;
       renderChatList();
       if(pendingChatId){
         const target=pendingChatId;
@@ -1583,6 +1603,7 @@ async function page(p, profileIdentifier = null){
       document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.type==='direct'?'محادثة خاصة':active.members.length+' أعضاء'+(active.messaging_paused?' · الإرسال متوقف':'');document.querySelector('#chatTags').innerHTML=hashtagsHTML(active.hashtags||[]);const manage=document.querySelector('#chatManageBtn');const myRole=active.members?.find(m=>Number(m.id)===Number(currentUser.id))?.membership_role;manage.style.display=active.type==='direct'||(Number(active.host_user_id)!==Number(currentUser.id)&&myRole!=='cohost'&&role()!=='owner')?'none':'block';manage.onclick=()=>openChatManagement(active);
       const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       const wasNearBottom=messages.scrollHeight-messages.scrollTop-messages.clientHeight<100;
+      if(isUserScrolling)return;
       messages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble ${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>${escapeHTML(m.sender.full_name)}</small><div>${escapeHTML(m.body)}</div><time>${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
       if(!preserveScroll || wasNearBottom) messages.scrollTop=messages.scrollHeight;
       renderChatList(document.querySelector('#chatSearch')?.value||'');
@@ -2066,6 +2087,7 @@ function throttle(fn,wait=100){
 
 (async function(){
 
+  installScrollGuards();
   await loadCurrentUser();
 
   await heartbeat();
