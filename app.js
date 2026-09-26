@@ -1277,7 +1277,10 @@ async function page(p, profileIdentifier = null){
   }
 
   if(p === 'about'){
-
+    let site = {};
+    try { const r=await fetch(API+'/api/app-settings',{cache:'no-store'}); const x=await r.json(); site=x.settings||{}; } catch(e) {}
+    const aboutTitle=site.about_title || 'اتحاد طلبة كلية القانون';
+    const aboutBody=site.about_body || 'مجتمع طلابي للتواصل ومتابعة الأخبار والأنشطة والفعاليات والمناقشات.';
     app.innerHTML = `
 
       <div class="section-title">
@@ -1286,7 +1289,7 @@ async function page(p, profileIdentifier = null){
 
       <article class="card">
 
-        <h3 id="aboutTitle">اتحاد طلبة كلية القانون</h3><p id="aboutBody">مجتمع طلابي للتواصل ومتابعة الأخبار والأنشطة والفعاليات والمناقشات.</p>
+        <h3>${escapeHTML(aboutTitle)}</h3><p>${escapeHTML(aboutBody)}</p>
 
       </article>
 
