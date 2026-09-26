@@ -749,17 +749,29 @@ async function renderManagementPage(target){
     if(target === 'applications'){
       const data=await adminFetch('/api/admin/registrations');
       const applications=data.applications||[];
-      app.innerHTML='<div class="section-title"><h2>طلبات العضوية</h2><span>'+applications.length+' طلب</span></div><div class="card" id="applicationsList">'+
-        (applications.length ? applications.map(a =>
-          '<div class="admin-user-row"><div><strong>'+escapeHTML(a.full_name)+'</strong><div class="admin-user-meta"><span>'+escapeHTML(a.student_id)+'</span><span>'+escapeHTML(a.academic_year||'')+'</span><span>'+escapeHTML(a.phone||'')+'</span><span>'+escapeHTML(a.status)+'</span></div><small>'+escapeHTML(a.note||'')+'</small></div><div class="admin-user-actions"><select data-application="'+a.id+'"><option value="pending" '+(a.status==='pending'?'selected':'')+'>قيد المراجعة</option><option value="approved" '+(a.status==='approved'?'selected':'')+'>مقبول</option><option value="rejected" '+(a.status==='rejected'?'selected':'')+'>مرفوض</option></select></div></div>'
-        ).join('') : '<div class="empty">لا توجد طلبات عضوية.</div>')+'</div>';
+      const active=applications.filter(a=>!a.archived_at);
+      const archived=applications.filter(a=>!!a.archived_at);
+      const row=a=>{
+        const statusLabel=a.status==='approved'?'مقبول':a.status==='rejected'?'مرفوض':'قيد المراجعة';
+        const archiveLabel=a.archived_at?'<span class="tag">مؤرشف</span>':'';
+        const ownerDelete=role()==='owner'?'<button class="btn secondary" type="button" data-delete-application="'+a.id+'">حذف الطلب</button>':'';
+        return '<div class="admin-user-row"><div><strong>'+escapeHTML(a.full_name)+'</strong><div class="admin-user-meta"><span>'+escapeHTML(a.student_id)+'</span><span>'+escapeHTML(a.academic_year||'')+'</span><span>'+escapeHTML(a.phone||'')+'</span><span class="tag">'+statusLabel+'</span>'+archiveLabel+'</div><small>'+escapeHTML(a.note||'')+(a.rejection_reason?' · سبب الرفض: '+escapeHTML(a.rejection_reason):'')+(a.reviewer_name?' · راجعه: '+escapeHTML(a.reviewer_name):'')+'</small></div><div class="admin-user-actions">'+(!a.archived_at?'<select data-application="'+a.id+'"><option value="pending" '+(a.status==='pending'?'selected':'')+'>قيد المراجعة</option><option value="approved" '+(a.status==='approved'?'selected':'')+'>مقبول</option><option value="rejected" '+(a.status==='rejected'?'selected':'')+'>مرفوض</option></select>':'')+ownerDelete+'</div></div>';
+      };
+      app.innerHTML='<div class="section-title"><h2>طلبات العضوية</h2><span>'+active.length+' نشط · '+archived.length+' مؤرشف</span></div>'+
+        '<article class="card"><div class="section-title compact"><h3>الطلبات الحالية</h3><span>'+active.length+'</span></div><div id="activeApplications">'+(active.length?active.map(row).join(''):'<div class="empty">لا توجد طلبات قيد المراجعة.</div>')+'</div></article>'+
+        '<article class="card"><div class="section-title compact"><h3>أرشيف الطلبات</h3><span>'+archived.length+'</span></div><p class="admin-note">تُؤرشف الطلبات تلقائياً عند قبولها أو رفضها. الأرشفة لا تغيّر حالة العضو ولا تحذف الحساب.</p><div id="archivedApplications">'+(archived.length?archived.map(row).join(''):'<div class="empty">لا توجد طلبات مؤرشفة.</div>')+'</div></article>';
       document.querySelectorAll('[data-application]').forEach(select=>select.onchange=async()=>{
         let rejection_reason=null;
         if(select.value==='rejected') rejection_reason=prompt('سبب الرفض (اختياري):')||null;
-        try{
-          await adminFetch('/api/admin/registrations/'+select.dataset.application,{method:'PATCH',body:JSON.stringify({status:select.value,rejection_reason})});
-          await renderManagementPage('applications');
-        }catch(e){alert(e.message);}
+        try{ await adminFetch('/api/admin/registrations/'+select.dataset.application,{method:'PATCH',body:JSON.stringify({status:select.value,rejection_reason})}); await renderManagementPage('applications'); }
+        catch(e){alert(e.message);}
+      });
+      document.querySelectorAll('[data-delete-application]').forEach(button=>button.onclick=async()=>{
+        if(role()!=='owner')return;
+        if(!confirm('سيتم حذف طلب العضوية فقط نهائياً. لن يتأثر حساب المتقدم أو قبوله السابق. هل تريد المتابعة؟'))return;
+        button.disabled=true;
+        try{await adminFetch('/api/admin/registrations/'+button.dataset.deleteApplication,{method:'DELETE'});await renderManagementPage('applications');}
+        catch(e){alert(e.message);button.disabled=false;}
       });
       return;
     }
@@ -1556,7 +1568,14 @@ async function page(p, profileIdentifier = null){
           <div id="chatActive" hidden>
             <header class="chat-window-head"><div><strong id="chatTitle"></strong><small id="chatSubtitle"></small><div id="chatTags" class="hashtags"></div></div><button id="chatManageBtn" class="chat-manage-btn" type="button">إدارة</button></header>
             <div id="chatMessages" class="chat-messages"></div>
-            <form id="chatForm" class="chat-compose"><input name="body" autocomplete="off" maxlength="4000" placeholder="اكتب رسالة..."><button>➤</button></form>
+            <div id="chatAttachmentPreview" class="chat-attachment-preview"></div>
+            <form id="chatForm" class="chat-compose">
+              <button type="button" class="chat-tool-btn" id="chatImageButton" title="إرسال صورة">▧</button>
+              <input id="chatImageInput" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+              <button type="button" class="chat-tool-btn" id="chatVoiceButton" title="تسجيل رسالة صوتية">🎙</button>
+              <input name="body" autocomplete="off" maxlength="4000" placeholder="اكتب رسالة...">
+              <button type="submit" class="chat-send-btn" title="إرسال">➤</button>
+            </form>
           </div>
         </section>
       </div>
@@ -1604,12 +1623,17 @@ async function page(p, profileIdentifier = null){
       const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       const wasNearBottom=messages.scrollHeight-messages.scrollTop-messages.clientHeight<100;
       if(isUserScrolling)return;
-      messages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble ${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>${escapeHTML(m.sender.full_name)}</small><div>${escapeHTML(m.body)}</div><time>${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
+      messages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble ${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>${escapeHTML(m.sender.full_name)}</small>${m.body?`<div>${escapeHTML(m.body)}</div>`:''}${m.image_url?`<img class="chat-media-image" src="${escapeHTML(m.image_url)}" alt="صورة مرسلة" loading="lazy">`:''}${m.audio_url?`<audio class="chat-media-audio" controls preload="metadata" src="${escapeHTML(m.audio_url)}"></audio>`:''}<time>${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
       if(!preserveScroll || wasNearBottom) messages.scrollTop=messages.scrollHeight;
       renderChatList(document.querySelector('#chatSearch')?.value||'');
     }
     document.querySelector('#chatSearch').oninput=e=>renderChatList(e.target.value);
-    document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;if(!input.value.trim())return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';await openChat(active.id);await loadConversations();};
+    let chatImageData=null,chatAudioData=null,voiceRecorder=null,voiceChunks=[];
+    const imageInput=document.querySelector('#chatImageInput'), imagePreview=document.querySelector('#chatAttachmentPreview');
+    document.querySelector('#chatImageButton').onclick=()=>imageInput.click();
+    imageInput.onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('اختر صورة أقل من 5MB.');e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{chatImageData=rd.result;chatAudioData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🖼️ صورة مرفقة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment').onclick=()=>{chatImageData=null;imageInput.value='';imagePreview.innerHTML='';};};rd.readAsDataURL(file);};
+    document.querySelector('#chatVoiceButton').onclick=async()=>{if(voiceRecorder&&voiceRecorder.state==='recording'){voiceRecorder.stop();return;}if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){alert('تسجيل الصوت غير مدعوم في هذا المتصفح.');return;}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});voiceChunks=[];voiceRecorder=new MediaRecorder(stream);voiceRecorder.ondataavailable=e=>{if(e.data.size)voiceChunks.push(e.data);};voiceRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(voiceChunks,{type:voiceRecorder.mimeType||'audio/webm'});if(blob.size>1600000){alert('الرسالة الصوتية كبيرة جداً. سجل مقطعاً أقصر.');return;}const rd=new FileReader();rd.onload=()=>{chatAudioData=rd.result;chatImageData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🎙️ رسالة صوتية جاهزة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment').onclick=()=>{chatAudioData=null;imagePreview.innerHTML='';};};rd.readAsDataURL(blob);document.querySelector('#chatVoiceButton').textContent='🎙';};voiceRecorder.start();document.querySelector('#chatVoiceButton').textContent='⏹';}catch(error){alert('تعذر الوصول إلى الميكروفون. تأكد من السماح بالميكروفون.');}};
+    document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;const body=input.value.trim();if(!body&&!chatImageData&&!chatAudioData)return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body,image_url:chatImageData,audio_url:chatAudioData})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';chatImageData=null;chatAudioData=null;imageInput.value='';imagePreview.innerHTML='';await openChat(active.id);await loadConversations();};
     document.querySelector('#closeChatModal').onclick=closeCreateChatModal;
 document.querySelector('#chatModal').onclick=e=>{if(e.target.id==='chatModal')closeCreateChatModal();};
 document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChatModal('direct');};
