@@ -1876,56 +1876,40 @@ async function updateNotificationDot(){
   }catch(e){}
 }
 
-document.documentElement.style.scrollBehavior='smooth';
-document.querySelector('#bottomMenu').onclick=()=>{ updateDrawer(); drawer(true); };
-
-document
-  .querySelector('#menu')
-  .onclick = () => {
-
-    updateDrawer();
-
-    drawer(true);
-  };
-
-
-document
-  .querySelector('#close')
-  .onclick = () => drawer(false);
-
-
-document
-  .querySelector('#shade')
-  .onclick = () => drawer(false);
-
-
-document
-  .querySelectorAll(
-    '.bottom-nav [data-page], .top-action[data-page]'
-  )
-  .forEach(button => {
-    button.onclick = () => page(button.dataset.page);
+function bindGlobalControls(){
+  document.documentElement.style.scrollBehavior='smooth';
+  const bottomMenu=document.querySelector('#bottomMenu');
+  if(bottomMenu) bottomMenu.onclick=()=>{ updateDrawer(); drawer(true); };
+  const menu=document.querySelector('#menu');
+  if(menu) menu.onclick=()=>{ updateDrawer(); drawer(true); };
+  const close=document.querySelector('#close');
+  if(close) close.onclick=()=>drawer(false);
+  const shade=document.querySelector('#shade');
+  if(shade) shade.onclick=()=>drawer(false);
+  document.querySelectorAll('.bottom-nav [data-page], .top-action[data-page], #globalTabs [data-page]').forEach(button=>{
+    button.onclick=()=>page(button.dataset.page);
   });
-
-const creationButton = document.querySelector('.create-btn');
-if(creationButton){
-  creationButton.type = 'button';
-  creationButton.onclick = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const hub = document.querySelector('#creationHub');
-    if(hub){
-      hub.classList.toggle('open');
-      creationButton.classList.toggle('create-open', hub.classList.contains('open'));
-      return;
-    }
-    openCreationHub();
-  };
+  const creationButton=document.querySelector('.create-btn');
+  if(creationButton){
+    creationButton.type='button';
+    creationButton.onclick=(event)=>{
+      event.preventDefault();
+      event.stopPropagation();
+      const hub=document.querySelector('#creationHub');
+      if(hub){
+        hub.classList.toggle('open');
+        creationButton.classList.toggle('create-open',hub.classList.contains('open'));
+      }else openCreationHub();
+    };
+  }
+  const drawerProfile=document.querySelector('.drawer-profile');
+  if(drawerProfile) drawerProfile.addEventListener('click',event=>{
+    if(event.target.closest('#close'))return;
+    if(currentUser){drawer(false);page('profile',currentUser.profile_slug||currentUser.id);}
+  });
 }
-
-
-document.querySelectorAll('#globalTabs [data-page]').forEach(button=>button.onclick=()=>page(button.dataset.page));
-const drawerProfile=document.querySelector('.drawer-profile');drawerProfile?.addEventListener('click',event=>{if(event.target.closest('#close'))return;if(currentUser){drawer(false);page('profile',currentUser.profile_slug||currentUser.id);}});
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bindGlobalControls,{once:true});
+else bindGlobalControls();
 
 /* =========================
    START
