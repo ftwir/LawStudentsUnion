@@ -670,7 +670,6 @@ async function renderCreatePost(){
     document.querySelector('#createPostForm').onsubmit=async ev=>{ev.preventDefault();const form=ev.currentTarget,d=new FormData(form),ed=document.querySelector('#richEditor'),body=ed?ed.innerText.trim():String(d.get('body')||'').trim();if(!body)return;const bodyHtml=ed?ed.innerHTML:null,file=document.querySelector('#postImageInput')?.files?.[0];const send=async imageData=>{const rr=await fetch(API+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({section:d.get('section'),title:d.get('title'),body,body_html:bodyHtml,content_type:type,hashtags:tags(d.get('hashtags')),image_url:imageData})}),x=await rr.json();if(!rr.ok||!x.ok)throw new Error(x.message||'تعذر النشر.');page('home');};try{if(file){const rd=new FileReader();rd.onload=()=>send(rd.result).catch(x=>document.querySelector('#createStatus').textContent=x.message);rd.readAsDataURL(file);}else await send(null);}catch(x){document.querySelector('#createStatus').textContent=x.message;}};};
   }
   document.querySelectorAll('.create-type').forEach(b=>b.onclick=()=>render(b.dataset.type));render('post');
-}
 
 
 /* =========================
