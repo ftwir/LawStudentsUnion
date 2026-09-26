@@ -2041,7 +2041,7 @@ function drawer(open){
 }
 
 
-window.updateNotificationDot = async function updateNotificationDot(){
+async function updateNotificationDot(){
   const dot=document.querySelector('#notificationDot');
   if(!dot || !currentUser) return;
   try{
@@ -2050,6 +2050,7 @@ window.updateNotificationDot = async function updateNotificationDot(){
     dot.hidden=!(x.ok && (x.notifications||[]).some(n=>!n.is_read));
   }catch(e){}
 }
+window.updateNotificationDot = updateNotificationDot;
 
 function bindGlobalControls(){
   function resetHiddenOverlays(){
