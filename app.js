@@ -739,6 +739,25 @@ async function renderManagementPage(target){
       return;
     }
 
+    if(target === 'reports'){
+      const data=await adminFetch('/api/admin/reports');
+      const reports=data.reports||[];
+      app.innerHTML='<div class="section-title"><h2>البلاغات</h2><span>'+reports.length+' بلاغ</span></div><div class="card" id="reportsList">'+
+        (reports.length ? reports.map(r =>
+          '<div class="report-row">'+
+          '<div><strong>'+escapeHTML(r.post_title||'منشور بدون عنوان')+'</strong><p>'+escapeHTML((r.post_body||'').slice(0,240))+'</p><small>بواسطة '+escapeHTML(r.reporter_name)+' · صاحب المنشور: '+escapeHTML(r.author_name)+' · '+escapeHTML(new Date(r.created_at).toLocaleString('ar-LY'))+'</small></div>'+
+          '<div class="report-meta"><span class="tag">'+escapeHTML(r.reason)+'</span><select data-report="'+r.id+'"><option value="open" '+(r.status==='open'?'selected':'')+'>مفتوح</option><option value="resolved" '+(r.status==='resolved'?'selected':'')+'>تمت المعالجة</option><option value="dismissed" '+(r.status==='dismissed'?'selected':'')+'>مرفوض</option></select></div>'+
+          '</div>'
+        ).join('') : '<div class="empty">لا توجد بلاغات.</div>')+'</div>';
+      document.querySelectorAll('[data-report]').forEach(select=>select.onchange=async()=>{
+        try{
+          await adminFetch('/api/admin/reports/'+select.dataset.report,{method:'PATCH',body:JSON.stringify({status:select.value})});
+          await renderManagementPage('reports');
+        }catch(e){alert(e.message);}
+      });
+      return;
+    }
+
     if(target === 'logs'){
       const data=await adminFetch('/api/admin/audit-logs');
       app.innerHTML='<div class="section-title"><h2>سجل النظام</h2><span>'+((data.logs||[]).length)+' عملية</span></div><div class="card admin-log-list">'+((data.logs||[]).map(log =>
