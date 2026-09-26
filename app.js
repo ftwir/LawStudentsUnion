@@ -1849,13 +1849,24 @@ document
     '.bottom-nav [data-page], .top-action[data-page]'
   )
   .forEach(button => {
-
-    button.onclick = () => {
-       if(button.classList.contains('create-btn')){ openCreationHub(); return; }
-       page(button.dataset.page);
-     };
-
+    button.onclick = () => page(button.dataset.page);
   });
+
+const creationButton = document.querySelector('.create-btn');
+if(creationButton){
+  creationButton.type = 'button';
+  creationButton.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const hub = document.querySelector('#creationHub');
+    if(hub){
+      hub.classList.toggle('open');
+      creationButton.classList.toggle('create-open', hub.classList.contains('open'));
+      return;
+    }
+    openCreationHub();
+  };
+}
 
 
 document.querySelectorAll('#globalTabs [data-page]').forEach(button=>button.onclick=()=>page(button.dataset.page));
