@@ -611,6 +611,7 @@ app.put("/api/profile", requireAuth(async (req, res) => {
             bio,
             email,
             avatar_url,
+            cover_url,
             privacy_settings,
             notification_settings,
             password
@@ -634,6 +635,21 @@ app.put("/api/profile", requireAuth(async (req, res) => {
                 return res.status(400).json({
                     ok: false,
                     message: "Invalid profile image."
+                });
+            }
+        }
+
+        if (cover_url !== undefined && cover_url !== null) {
+            if (typeof cover_url !== "string" || cover_url.length > 3000000) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "Cover image is too large."
+                });
+            }
+            if (!cover_url.startsWith("data:image/") && !cover_url.startsWith("http://") && !cover_url.startsWith("https://")) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "Invalid cover image."
                 });
             }
         }
@@ -691,14 +707,14 @@ app.put("/api/profile", requireAuth(async (req, res) => {
                  email = $5,
                  avatar_url = $6::text,
                  profile_background_url = CASE
-                    WHEN $6::text IS NOT NULL THEN $6::text
+                    WHEN $7::boolean THEN $8::text
                     ELSE profile_background_url
                  END,
-                 privacy_settings = $7::jsonb,
-                 notification_settings = $8::jsonb,
-                 password_hash = COALESCE($9, password_hash),
+                 privacy_settings = $9::jsonb,
+                 notification_settings = $10::jsonb,
+                 password_hash = COALESCE($11, password_hash),
                  profile_slug = COALESCE(profile_slug, 'u-' || id)
-             WHERE id = $10`,
+             WHERE id = $12`,
             [
                 full_name !== undefined ? String(full_name).trim() : null,
                 phone || null,
@@ -706,6 +722,8 @@ app.put("/api/profile", requireAuth(async (req, res) => {
                 bio || null,
                 email || null,
                 avatar_url !== undefined ? avatar_url : req.user.avatar_url,
+                cover_url !== undefined,
+                cover_url !== undefined ? cover_url : null,
                 JSON.stringify(nextPrivacy),
                 JSON.stringify(nextNotifications),
                 passwordHash,
@@ -716,7 +734,7 @@ app.put("/api/profile", requireAuth(async (req, res) => {
         await pool.query(
             `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
              VALUES ($1, 'profile.updated', 'user', $1, $2::jsonb)`,
-            [req.user.id, JSON.stringify({ avatar_changed: avatar_url !== undefined, password_changed: !!password })]
+            [req.user.id, JSON.stringify({ avatar_changed: avatar_url !== undefined, cover_changed: cover_url !== undefined, password_changed: !!password })]
         );
 
         const updated = await getAuthenticatedUser(req);
