@@ -796,7 +796,7 @@ async function renderManagementPage(target){
               (role()==='owner' ? '<select data-role="'+u.id+'"><option value="member" '+(u.role==='member'?'selected':'')+'>عضو</option><option value="admin" '+(u.role==='admin'?'selected':'')+'>Admin</option></select>' : '')+
               '<button class="btn secondary" data-status="'+u.id+'" data-active="'+u.is_active+'">'+(u.is_active?'تعطيل':'تفعيل')+'</button>'+
             '</div></div>'
-        ).join('') : '<div class="empty">لا توجد نتائج.</div>';
+        ).join('') : '<div class="empty">لا توجد نتائج.</div>');
 
         document.querySelectorAll('[data-status]').forEach(btn=>btn.onclick=async()=>{
           try{
