@@ -113,6 +113,17 @@ app.post("/api/posts", requireAuth(async (req, res) => {
             INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
             VALUES ($1, 'post.created', 'post', $2, $3::jsonb)
         `, [req.user.id, result.rows[0].id, JSON.stringify({ section, has_image: !!imageUrl })]);
+        const notificationSource = section === "announcements" ? "announcement" : ((req.user.role === "admin" || req.user.role === "owner") ? "admin" : "member");
+        await notifyActiveMembers({
+            actorId: req.user.id,
+            actorName: req.user.full_name,
+            kind: "post",
+            title: title || "منشور جديد في مجتمع الاتحاد",
+            body,
+            source: notificationSource,
+            referenceType: "post",
+            referenceId: result.rows[0].id
+        });
 
         const postResult = await pool.query(`
             SELECT p.id, p.section, p.title, p.body, p.image_url,
@@ -540,6 +551,25 @@ app.patch("/api/admin/registrations/:id", requireRoles("admin", "owner"), async 
         res.status(500).json({ ok: false, message: "Could not update membership application." });
     }
 });
+
+async function createMemberNotification({ recipientId, actorId, kind, title, body, source, referenceType, referenceId }) {
+    await pool.query(
+        `INSERT INTO user_notifications
+         (recipient_id, actor_id, kind, title, body, source, reference_type, reference_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [recipientId, actorId || null, kind, title, body || null, source || 'member', referenceType || null, referenceId || null]
+    );
+}
+
+async function notifyActiveMembers({ actorId, actorName, kind, title, body, source, referenceType, referenceId }) {
+    const recipients = await pool.query(
+        `SELECT id FROM users WHERE is_active = TRUE AND id <> $1`,
+        [actorId]
+    );
+    for (const row of recipients.rows) {
+        await createMemberNotification({ recipientId: row.id, actorId, kind, title, body, source, referenceType, referenceId });
+    }
+}
 
 async function getOrCreateCommunityConversation() {
     const existing = await pool.query(
