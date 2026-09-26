@@ -650,10 +650,23 @@ async function renderPostsPage(){
 
 async function renderCreatePost(){
   if(!currentUser){page('login');return;}
-  app.innerHTML='<div class="section-title"><h2>إنشاء منشور</h2><span>Community</span></div><article class="card"><form class="form" id="createPostForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="announcements">الإعلانات</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>العنوان (اختياري)<input name="title" maxlength="255"></label><label>محتوى المنشور<textarea name="body" maxlength="10000" rows="7" required placeholder="شارك شيئاً مع مجتمع الاتحاد..."></textarea></label><label>صورة<input id="postImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><div id="postImagePreview"></div><button class="btn" id="publishPostButton">نشر المنشور</button><div id="postCreateStatus"></div></form></article>';
-  let imageData=null;
-  document.querySelector('#postImageInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('الصورة يجب ألا تتجاوز 5MB.');e.target.value='';return;}const reader=new FileReader();reader.onload=()=>{imageData=reader.result;document.querySelector('#postImagePreview').innerHTML='<img class="post-image" src="'+escapeHTML(imageData)+'" alt="معاينة الصورة">';};reader.readAsDataURL(file);};
-  document.querySelector('#createPostForm').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,data=Object.fromEntries(new FormData(form)),button=document.querySelector('#publishPostButton'),status=document.querySelector('#postCreateStatus');button.disabled=true;status.textContent='جارٍ نشر المنشور...';try{const r=await fetch(API+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({section:data.section,title:data.title,body:data.body,image_url:imageData})});const x=await r.json();if(!r.ok||!x.ok)throw new Error(x.message||'تعذر نشر المنشور.');page('posts');}catch(error){status.textContent=error.message;button.disabled=false;}};
+  app.innerHTML=`<div class="section-title"><h2>إنشاء</h2><span>شارك مع المجتمع</span></div>
+  <div class="create-type-grid"><button class="create-type active" data-type="post">منشور</button><button class="create-type" data-type="poll">استطلاع رأي</button><button class="create-type" data-type="article">مقال</button></div>
+  <article class="card" id="createBox"></article>`;
+  const box=document.querySelector('#createBox');
+  function render(type){
+    document.querySelectorAll('.create-type').forEach(b=>b.classList.toggle('active',b.dataset.type===type));
+    if(type==='poll'){
+      box.innerHTML=`<form class="form" id="pollForm"><label>السؤال<textarea name="question" rows="3" required placeholder="ما رأيك؟"></textarea></label><div id="pollOptions"><input name="option" placeholder="الخيار 1" required><input name="option" placeholder="الخيار 2" required></div><button type="button" class="btn secondary" id="addOption">+ إضافة خيار</button><button class="btn">نشر الاستطلاع</button><div id="createStatus"></div></form>`;
+      document.querySelector('#addOption').onclick=()=>{const wrap=document.querySelector('#pollOptions');if(wrap.children.length<8){const i=document.createElement('input');i.name='option';i.placeholder='خيار جديد';wrap.appendChild(i);}};
+      document.querySelector('#pollForm').onsubmit=async e=>{e.preventDefault();const d=new FormData(e.currentTarget),options=d.getAll('option');const rr=await fetch(API+'/api/polls',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({question:d.get('question'),options})}),x=await rr.json();if(!rr.ok||!x.ok){document.querySelector('#createStatus').textContent=x.message||'تعذر النشر.';return;}page('home');};
+      return;
+    }
+    box.innerHTML=`<form class="form" id="createPostForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>${type==='article'?'عنوان المقال':'العنوان (اختياري)'}<input name="title" maxlength="255" ${type==='article'?'required':''}></label><label>المحتوى<textarea name="body" maxlength="10000" rows="8" required placeholder="${type==='article'?'اكتب مقالك هنا...':'شارك شيئاً مع مجتمع الاتحاد...'}"></textarea></label><label>صورة<input id="postImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><div id="postImagePreview"></div><button class="btn">نشر ${type==='article'?'المقال':'المنشور'}</button><div id="createStatus"></div></form>`;
+    let imageData=null;document.querySelector('#postImageInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('الصورة يجب ألا تتجاوز 5MB.');return;}const rd=new FileReader();rd.onload=()=>{imageData=rd.result;document.querySelector('#postImagePreview').innerHTML='<img class="post-image" src="'+escapeHTML(imageData)+'">';};rd.readAsDataURL(file);};
+    document.querySelector('#createPostForm').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));const rr=await fetch(API+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({section:d.section,title:d.title,body:d.body,image_url:imageData})}),x=await rr.json();if(!rr.ok||!x.ok){document.querySelector('#createStatus').textContent=x.message||'تعذر النشر.';return;}page('home');};
+  }
+  document.querySelectorAll('.create-type').forEach(b=>b.onclick=()=>render(b.dataset.type));render('post');
 }
 
 
@@ -854,6 +867,12 @@ async function page(p, profileIdentifier = null){
   if(p === 'create'){ await renderCreatePost(); return; }
 
   if(p === 'posts'){ await renderPostsPage(); return; }
+
+  if(p === 'activate'){
+    app.innerHTML=`<div class="login-wrap"><div class="login-card"><div class="login-logo">⚖</div><h1>تفعيل العضوية</h1><p>إذا تمت الموافقة على طلب عضويتك، أنشئ كلمة مرور لتفعيل حسابك.</p><form class="form" id="activateForm"><label>رقم القيد<input name="student_id" required></label><label>رقم الهاتف<input name="phone" required type="tel"></label><label>كلمة المرور<input name="password" type="password" minlength="8" required></label><label>تأكيد كلمة المرور<input name="confirm" type="password" minlength="8" required></label><button class="btn">تفعيل الحساب</button><div id="activateStatus"></div></form></div></div>`;
+    document.querySelector('#activateForm').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));const st=document.querySelector('#activateStatus');if(d.password!==d.confirm){st.textContent='كلمتا المرور غير متطابقتين.';return;}const rr=await fetch(API+'/api/membership/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}),x=await rr.json();if(!rr.ok||!x.ok){st.textContent=x.message||'تعذر تفعيل الحساب.';return;}setToken(x.token);currentUser=x.user;updateDrawer();page('home');};
+    return;
+  }
 
   if(p === 'login'){
 
@@ -1739,6 +1758,8 @@ document
 
   });
 
+
+document.querySelectorAll('#globalTabs [data-page]').forEach(button=>button.onclick=()=>page(button.dataset.page));
 
 /* =========================
    START
