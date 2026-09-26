@@ -2039,7 +2039,7 @@ const drawerProfile=document.querySelector('.drawer-profile');drawerProfile?.add
     }catch(error){}
   }
   function observe(){
-    const observer=new MutationObserver(()=>{const form=document.querySelector('#pollForm');if(form)enhancePollForm(form);if(document.querySelector('#homePosts')||document.querySelector('#postsPageFeed'))loadPolls();});
+    const observer=new MutationObserver(()=>{const form=document.querySelector('#pollForm');if(form)enhancePollForm(form);const host=document.querySelector('#homePosts')||document.querySelector('#postsPageFeed');if(host&&!host.parentElement.querySelector('.poll-feed'))loadPolls();});
     observer.observe(document.body,{childList:true,subtree:true});
     enhancePollForm(document.querySelector('#pollForm'));loadPolls();
     if(pollTimer)clearInterval(pollTimer);
