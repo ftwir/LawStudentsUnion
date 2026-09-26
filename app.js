@@ -1611,8 +1611,22 @@ async function page(p, profileIdentifier = null){
         const title=c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة';
         return !q || title.toLowerCase().includes(q) || String(c.last_message||'').toLowerCase().includes(q);
       });
-      list.innerHTML=visible.length?visible.map(c=>{const canDelete=role()==='owner'||(role()==='admin'&&c.type==='public')||(c.type==='direct'&&c.is_private&&c.members?.some(m=>Number(m.id)===Number(currentUser.id)))||(c.type!=='direct'&&Number(c.host_user_id)===Number(currentUser.id));return `<div class="chat-row-wrap"><button class="chat-row ${active&&Number(active.id)===Number(c.id)?'active':''}" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>${canDelete?`<button class="chat-delete-btn" type="button" data-delete-chat="${c.id}" aria-label="حذف الدردشة">حذف</button>`:''}</div>`;}).join(''):'<div class="empty">لا توجد محادثات مطابقة.</div>';
+      list.innerHTML=visible.length?visible.map(c=>{const canDelete=role()==='owner'||(role()==='admin'&&c.type==='public')||(c.type==='direct'&&c.is_private&&c.members?.some(m=>Number(m.id)===Number(currentUser.id)))||(c.type!=='direct'&&Number(c.host_user_id)===Number(currentUser.id));return `<div class="chat-row-wrap"><button class="chat-row ${active&&Number(active.id)===Number(c.id)?'active':''}" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button><button class="chat-mute-btn ${c.is_muted?'muted':''}" type="button" data-mute-chat="${c.id}" aria-label="${c.is_muted?'إلغاء كتم الدردشة':'كتم الدردشة'}" title="${c.is_muted?'إلغاء كتم الدردشة':'كتم الدردشة'}">${c.is_muted?'🔕':'🔔'}</button>${canDelete?`<button class="chat-delete-btn" type="button" data-delete-chat="${c.id}" aria-label="حذف الدردشة">حذف</button>`:''}</div>`;}).join(''):'<div class="empty">لا توجد محادثات مطابقة.</div>';
       list.querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.cid)));
+      list.querySelectorAll('[data-mute-chat]').forEach(b=>b.onclick=async e=>{
+        e.stopPropagation();
+        const id=Number(b.dataset.muteChat);
+        const c=conversations.find(x=>Number(x.id)===id);
+        if(!c)return;
+        b.disabled=true;
+        try{
+          const rr=await fetch(API+'/api/chat/conversations/'+id+'/mute',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({muted:!c.is_muted})});
+          const xx=await rr.json();
+          if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر تغيير حالة كتم الدردشة.');
+          c.is_muted=!!xx.is_muted;
+          renderChatList(document.querySelector('#chatSearch')?.value||'');
+        }catch(error){alert(error.message);}finally{b.disabled=false;}
+      });
       list.querySelectorAll('[data-delete-chat]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const id=Number(b.dataset.deleteChat);const c=conversations.find(x=>Number(x.id)===id);if(!c)return;if(!confirm('سيتم حذف الدردشة ورسائلها نهائياً لجميع المشاركين. هل تريد المتابعة؟'))return;b.disabled=true;try{const rr=await fetch(API+'/api/chat/conversations/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر حذف الدردشة.');if(active&&Number(active.id)===id){active=null;document.querySelector('#chatEmpty').hidden=false;document.querySelector('#chatActive').hidden=true;}await loadConversations();}catch(error){alert(error.message);}finally{b.disabled=false;}});
     }
     async function openChat(id,preserveScroll=false){
