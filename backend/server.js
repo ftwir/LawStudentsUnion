@@ -737,11 +737,28 @@ app.put("/api/profile", requireAuth(async (req, res) => {
 
 app.post("/api/presence/heartbeat", requireAuth(async (req, res) => {
     await pool.query(
-        `UPDATE users SET last_seen_at = NOW() WHERE id = $1`,
-        [req.user.id]
+        `UPDATE users SET last_seen_at = NOW(), current_page = $2 WHERE id = $1`,
+        [req.user.id, String(req.body?.page || 'home').slice(0,80)]
     );
 
     res.json({ ok: true, online: true });
+}));
+
+app.get("/api/presence/online-hub", requireAuth(async (req,res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, full_name, avatar_url, profile_slug, current_page, last_seen_at
+             FROM users
+             WHERE is_active = TRUE
+               AND last_seen_at >= NOW() - INTERVAL '90 seconds'
+             ORDER BY last_seen_at DESC, full_name ASC
+             LIMIT 100`
+        );
+        res.json({ok:true, users:result.rows.map(u=>({...u,id:Number(u.id),online:true}))});
+    } catch(error) {
+        console.error(error);
+        res.status(500).json({ok:false,message:"Could not load online hub."});
+    }
 }));
 
 app.get("/api/presence/online-count", async (req, res) => {
@@ -1202,9 +1219,12 @@ async function initializeDatabase() {
 
         await pool.query(schema);
 
-        console.log(
-            "Database schema initialized successfully."
-        );
+        await pool.query(`INSERT INTO conversations(name,type,is_private,created_by)
+            SELECT x.name,'public',FALSE,NULL FROM (VALUES
+              ('عام الاتحاد'),('الدراسة والمساعدة'),('الأنشطة والفعاليات')
+            ) AS x(name)
+            WHERE NOT EXISTS (SELECT 1 FROM conversations c WHERE c.type='public' AND c.name=x.name)`);
+        console.log("Database schema initialized successfully.");
 
     } catch (error) {
 
