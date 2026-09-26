@@ -1692,6 +1692,7 @@ document
   await updateNotificationDot();
 
   setInterval(heartbeat, 30000);
+  setInterval(updateNotificationDot, 30000);
 
   const hash = location.hash.replace(/^#/, '');
   async function handleHash(){
