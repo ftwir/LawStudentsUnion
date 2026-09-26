@@ -6,13 +6,21 @@ function normalizeSection(value) {
 }
 
 function sanitizeRichHTML(value) {
-    let html=String(value||"").slice(0,50000).replace(/<!--[\s\S]*?-->/g,"");
-    const allowedTags=new Set(["p","div","br","strong","b","em","i","u","s","h1","h2","h3","blockquote","ul","ol","li","span","font","a"]);
+    let html=String(value||"").slice(0,9000000).replace(/<!--[\s\S]*?-->/g,"");
+    const allowedTags=new Set(["p","div","br","strong","b","em","i","u","s","h1","h2","h3","blockquote","ul","ol","li","span","font","a","img"]);
     html=html.replace(/<\/?([a-z0-9]+)([^>]*)>/gi,(full,rawTag,rawAttrs)=>{
         const tag=String(rawTag).toLowerCase();
         if(!allowedTags.has(tag)) return "";
-        if(full.startsWith("</")) return "</"+tag+">";
+        if(full.startsWith("</")) return tag === "img" ? "" : "</"+tag+">";
         if(tag==="br") return "<br>";
+        if(tag==="img"){
+            const srcMatch=String(rawAttrs||"").match(/(?:^|\s)src\s*=\s*["']([^"']+)["']/i);
+            if(!srcMatch) return "";
+            const src=srcMatch[1].trim();
+            const safeRemote=/^https:\/\/[^\s"'<>]+$/i.test(src);
+            if(!validateImageDataUrl(src) && !safeRemote) return "";
+            return '<img src="'+src.replace(/&/g,"&amp;").replace(/"/g,"&quot;")+'" loading="lazy" alt="">';
+        }
         let attrs="";
         if(tag==="font"){
             const color=String(rawAttrs||"").match(/(?:^|\s)color\s*=\s*["']?(#[0-9a-f]{3,8})["']?/i);
@@ -25,12 +33,20 @@ function sanitizeRichHTML(value) {
             if(styleMatch){
                 const safeDecls=[];
                 for(const part of styleMatch[1].split(";")){
-                    const m=part.trim().match(/^(text-align|color|font-weight|font-style|text-decoration)\s*:\s*([^;]+)$/i);
+                    const m=part.trim().match(/^(text-align|color|font-weight|font-style|text-decoration|font-size)\s*:\s*([^;]+)$/i);
                     if(!m) continue;
+                    const property=m[1].toLowerCase();
                     const val=m[2].trim();
                     if(/url\s*\(|expression\s*\(|javascript\s*:/i.test(val)) continue;
-                    if(m[1].toLowerCase()==="color" && !/^(#[0-9a-f]{3,8}|rgb\([^)]{1,30}\)|rgba\([^)]{1,35}\)|[a-z]+)$/i.test(val)) continue;
-                    safeDecls.push(m[1].toLowerCase()+":"+val);
+                    if(property==="color" && !/^(#[0-9a-f]{3,8}|rgb\([^)]{1,30}\)|rgba\([^)]{1,35}\)|[a-z]+)$/i.test(val)) continue;
+                    if(property==="font-size"){
+                        const em=val.match(/^([0-9]+(?:\.[0-9]+)?)em$/i);
+                        const px=val.match(/^([0-9]+(?:\.[0-9]+)?)px$/i);
+                        const safeEm=em && Number(em[1])>=0.6 && Number(em[1])<=2.5;
+                        const safePx=px && Number(px[1])>=8 && Number(px[1])<=40;
+                        if(!safeEm && !safePx) continue;
+                    }
+                    safeDecls.push(property+":"+val);
                 }
                 if(safeDecls.length) attrs=' style="'+safeDecls.join(";")+'"';
             }
