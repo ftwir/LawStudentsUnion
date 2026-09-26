@@ -1379,7 +1379,11 @@ async function page(p, profileIdentifier = null){
         list.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>openProfile(b.dataset.profile));
       }catch(e){}
     }
-    await loadOnlineHub();onlineHubTimer=setInterval(loadOnlineHub,4000);return;
+    await loadOnlineHub();
+    onlineHubTimer=setInterval(()=>{
+      if(document.visibilityState==='visible')loadOnlineHub();
+    },10000);
+    return;
   }
 
   if(p === 'profile'){
@@ -1616,7 +1620,13 @@ document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChat
       finally{button.disabled=false;button.textContent='إنشاء';}
     };
     await loadConversations();
-    chatPollTimer=setInterval(async()=>{try{await loadConversations();if(active)await openChat(active.id,true);}catch(e){}},1800);
+    chatPollTimer=setInterval(async()=>{
+      if(document.visibilityState!=='visible'||!active)return;
+      try{
+        await loadConversations();
+        if(active)await openChat(active.id,true);
+      }catch(e){}
+    },5000);
     return;
 
   }
@@ -1894,17 +1904,18 @@ let drawerTouchStartX=0;
 document.addEventListener('touchstart',e=>{drawerTouchStartX=e.changedTouches[0].clientX;window.__drawerTouchStartY=e.changedTouches[0].clientY;},{passive:true});
 document.addEventListener('touchmove',e=>{if(!document.querySelector('#drawer.open'))return;const t=e.touches[0];const dx=t.clientX-drawerTouchStartX;const dy=t.clientY-(window.__drawerTouchStartY||t.clientY);if(Math.abs(dx)>Math.abs(dy)&&dx>0)e.preventDefault();},{passive:false});
 document.addEventListener('touchend',e=>{const end=e.changedTouches[0].clientX,delta=end-drawerTouchStartX,open=document.querySelector('#drawer')?.classList.contains('open');if(open&&delta>60)drawer(false);else if(!open&&drawerTouchStartX>window.innerWidth-32&&delta<-60){updateDrawer();drawer(true);}});
+function setOverlayState(element, open){
+  if(!element)return;
+  element.classList.toggle('open', !!open);
+  element.style.opacity=open?'1':'0';
+  element.style.visibility=open?'visible':'hidden';
+  element.style.pointerEvents=open?'auto':'none';
+  if(element.id==='shade')element.style.display=open?'block':'none';
+}
+
 function drawer(open){
-
-  document
-    .querySelector('#drawer')
-    .classList
-    .toggle('open',open);
-
-  document
-    .querySelector('#shade')
-    .classList
-    .toggle('open',open);
+  setOverlayState(document.querySelector('#drawer'), !!open);
+  setOverlayState(document.querySelector('#shade'), !!open);
 }
 
 
@@ -1919,6 +1930,28 @@ async function updateNotificationDot(){
 }
 
 function bindGlobalControls(){
+  function resetHiddenOverlays(){
+    const overlays=[
+      document.querySelector('#shade'),
+      document.querySelector('#creationHub'),
+      document.querySelector('#chatModal'),
+      document.querySelector('#chatManageModal'),
+      document.querySelector('#drawer')
+    ].filter(Boolean);
+
+    overlays.forEach(el=>{
+      const isOpen=el.classList.contains('open')&&!el.hidden;
+      if(!isOpen){
+        el.classList.remove('open');
+        el.style.opacity='0';
+        el.style.visibility='hidden';
+        el.style.pointerEvents='none';
+        if(el.id==='shade')el.style.display='none';
+      }
+    });
+  }
+
+  resetHiddenOverlays();
   document.documentElement.style.scrollBehavior='smooth';
   const bottomMenu=document.querySelector('#bottomMenu');
   if(bottomMenu) bottomMenu.onclick=()=>{ updateDrawer(); drawer(true); };
@@ -1960,9 +1993,13 @@ else bindGlobalControls();
     const shade=document.querySelector('#shade');
     if(shade && !shade.classList.contains('open')){
       shade.style.display='none';
+      shade.style.opacity='0';
+      shade.style.visibility='hidden';
       shade.style.pointerEvents='none';
     }
-    document.querySelectorAll('.creation-hub:not(.open), .chat-modal[hidden]').forEach(el=>{
+    document.querySelectorAll('.creation-hub:not(.open), .chat-modal[hidden], #chatManageModal:not(.open), #drawer:not(.open)').forEach(el=>{
+      el.style.opacity='0';
+      el.style.visibility='hidden';
       el.style.pointerEvents='none';
     });
   }
@@ -1999,6 +2036,32 @@ else bindGlobalControls();
 
 
 /* =========================
+   PERFORMANCE HELPERS
+========================= */
+function debounce(fn,wait=200){
+  let timer=null;
+  return function(...args){
+    clearTimeout(timer);
+    timer=setTimeout(()=>fn.apply(this,args),wait);
+  };
+}
+function throttle(fn,wait=100){
+  let last=0,timer=null;
+  return function(...args){
+    const now=Date.now(),remaining=wait-(now-last);
+    if(remaining<=0){
+      clearTimeout(timer);timer=null;last=now;fn.apply(this,args);
+    }else if(!timer){
+      timer=setTimeout(()=>{timer=null;last=Date.now();fn.apply(this,args);},remaining);
+    }
+  };
+}
+(function installScrollPerformanceGuard(){
+  const onScroll=throttle(()=>{},100);
+  window.addEventListener('scroll',onScroll,{passive:true});
+})();
+
+/* =========================
    START
 ========================= */
 
@@ -2009,8 +2072,8 @@ else bindGlobalControls();
   await heartbeat();
   await updateNotificationDot();
 
-  setInterval(heartbeat, 30000);
-  setInterval(updateNotificationDot, 30000);
+  setInterval(()=>{if(document.visibilityState==='visible')heartbeat();},30000);
+  setInterval(()=>{if(document.visibilityState==='visible')updateNotificationDot();},30000);
 
   const hash = location.hash.replace(/^#/, '');
   async function handleHash(){
@@ -2113,7 +2176,13 @@ else bindGlobalControls();
     observer.observe(document.body,{childList:true,subtree:true});
     enhancePollForm(document.querySelector('#pollForm'));loadPolls();
     if(pollTimer)clearInterval(pollTimer);
-    pollTimer=setInterval(()=>{document.querySelectorAll('.poll-countdown').forEach(el=>{const card=el.closest('[data-poll-id]');if(card)el.textContent=formatRemaining(card.dataset.closes);});},1000);
+    pollTimer=setInterval(()=>{
+      if(document.visibilityState!=='visible')return;
+      document.querySelectorAll('.poll-countdown').forEach(el=>{
+        const card=el.closest('[data-poll-id]');
+        if(card)el.textContent=formatRemaining(card.dataset.closes);
+      });
+    },1000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
 })();
