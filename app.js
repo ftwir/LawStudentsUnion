@@ -699,7 +699,20 @@ async function renderManagementPage(target){
 
   try{
     if(target === 'applications'){
-      app.innerHTML = '<div class="section-title"><h2>طلبات العضوية</h2><span>Membership</span></div><article class="card"><h3>طلبات العضوية</h3><p>نظام التسجيل الحالي ينشئ حساب العضو مباشرة بعد نجاح التسجيل، لذلك لا توجد طلبات معلقة منفصلة في قاعدة البيانات الحالية.</p></article>';
+      const data=await adminFetch('/api/admin/registrations');
+      const applications=data.applications||[];
+      app.innerHTML='<div class="section-title"><h2>طلبات العضوية</h2><span>'+applications.length+' طلب</span></div><div class="card" id="applicationsList">'+
+        (applications.length ? applications.map(a =>
+          '<div class="admin-user-row"><div><strong>'+escapeHTML(a.full_name)+'</strong><div class="admin-user-meta"><span>'+escapeHTML(a.student_id)+'</span><span>'+escapeHTML(a.academic_year||'')+'</span><span>'+escapeHTML(a.phone||'')+'</span><span>'+escapeHTML(a.status)+'</span></div><small>'+escapeHTML(a.note||'')+'</small></div><div class="admin-user-actions"><select data-application="'+a.id+'"><option value="pending" '+(a.status==='pending'?'selected':'')+'>قيد المراجعة</option><option value="approved" '+(a.status==='approved'?'selected':'')+'>مقبول</option><option value="rejected" '+(a.status==='rejected'?'selected':'')+'>مرفوض</option></select></div></div>'
+        ).join('') : '<div class="empty">لا توجد طلبات عضوية.</div>')+'</div>';
+      document.querySelectorAll('[data-application]').forEach(select=>select.onchange=async()=>{
+        let rejection_reason=null;
+        if(select.value==='rejected') rejection_reason=prompt('سبب الرفض (اختياري):')||null;
+        try{
+          await adminFetch('/api/admin/registrations/'+select.dataset.application,{method:'PATCH',body:JSON.stringify({status:select.value,rejection_reason})});
+          await renderManagementPage('applications');
+        }catch(e){alert(e.message);}
+      });
       return;
     }
 
