@@ -1017,36 +1017,36 @@ app.post("/api/membership/apply", async (req,res)=>{
         if(user.rows.length)return res.status(409).json({ok:false,message:"يوجد حساب مسجل بهذه البيانات. استخدم تسجيل الدخول."});
         const existing=await pool.query("SELECT id,status FROM registrations WHERE student_id=$1 AND status IN ('pending','approved') ORDER BY id DESC LIMIT 1",[studentId]);
         if(existing.rows.length)return res.status(409).json({ok:false,message:existing.rows[0].status==="approved"?"يوجد طلب مقبول بهذا الرقم. يمكنك تفعيل العضوية.":"يوجد طلب عضوية قيد المراجعة بهذا الرقم."});
-        const result=await pool.query(\`INSERT INTO registrations(full_name,student_id,academic_year,email,phone,note,status) VALUES($1,$2,$3,$4,$5,$6,'pending') RETURNING id,full_name,student_id,academic_year,email,phone,note,status,created_at\`,[fullName,studentId,academicYear,email,phone,note]);
+        const result=await pool.query(`INSERT INTO registrations(full_name,student_id,academic_year,email,phone,note,status) VALUES($1,$2,$3,$4,$5,$6,'pending') RETURNING id,full_name,student_id,academic_year,email,phone,note,status,created_at`,[fullName,studentId,academicYear,email,phone,note]);
         res.status(201).json({ok:true,message:"تم تسجيل طلب العضوية بنجاح.",application:result.rows[0]});
     }catch(error){console.error(error);res.status(500).json({ok:false,message:"تعذر تسجيل طلب العضوية."});}
 });
 
 async function getChatMembership(conversationId,userId){
-    const result=await pool.query(\`SELECT cm.conversation_id,cm.user_id,cm.role,cm.is_muted,c.type,c.is_private,c.created_by,c.host_user_id,c.messaging_paused FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id WHERE cm.conversation_id=$1 AND cm.user_id=$2\`,[conversationId,userId]);
+    const result=await pool.query(`SELECT cm.conversation_id,cm.user_id,cm.role,cm.is_muted,c.type,c.is_private,c.created_by,c.host_user_id,c.messaging_paused FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id WHERE cm.conversation_id=$1 AND cm.user_id=$2`,[conversationId,userId]);
     return result.rows[0]||null;
 }
 async function getChatSummary(conversationId,userId){
-    const result=await pool.query(\`SELECT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_by,c.host_user_id,c.messaging_paused,c.voice_room_active,c.created_at,
+    const result=await pool.query(`SELECT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_by,c.host_user_id,c.messaging_paused,c.voice_room_active,c.created_at,
       COALESCE((SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC,m.id DESC LIMIT 1),'') AS last_message,
       COALESCE((SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC,m.id DESC LIMIT 1),c.created_at) AS last_message_at,
       COALESCE((SELECT cm2.is_muted FROM conversation_members cm2 WHERE cm2.conversation_id=c.id AND cm2.user_id=$2),false) AS is_muted,
       COALESCE((SELECT json_agg(json_build_object('id',u.id,'full_name',u.full_name,'avatar_url',u.avatar_url,'profile_slug',u.profile_slug,'membership_role',cm3.role) ORDER BY u.id) FROM conversation_members cm3 JOIN users u ON u.id=cm3.user_id WHERE cm3.conversation_id=c.id),'[]'::json) AS members
-      FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$2 WHERE c.id=$1\`,[conversationId,userId]);
+      FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$2 WHERE c.id=$1`,[conversationId,userId]);
     return result.rows[0]||null;
 }
 app.get("/api/chat/conversations",requireAuth(async(req,res)=>{
-    const result=await pool.query(\`SELECT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_by,c.host_user_id,c.messaging_paused,c.voice_room_active,c.created_at,
+    const result=await pool.query(`SELECT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_by,c.host_user_id,c.messaging_paused,c.voice_room_active,c.created_at,
       COALESCE((SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC,m.id DESC LIMIT 1),'') AS last_message,
       COALESCE((SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC,m.id DESC LIMIT 1),c.created_at) AS last_message_at,
       cm.is_muted,
       COALESCE((SELECT json_agg(json_build_object('id',u.id,'full_name',u.full_name,'avatar_url',u.avatar_url,'profile_slug',u.profile_slug,'membership_role',cm2.role) ORDER BY u.id) FROM conversation_members cm2 JOIN users u ON u.id=cm2.user_id WHERE cm2.conversation_id=c.id),'[]'::json) AS members
-      FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$1 ORDER BY last_message_at DESC,c.id DESC\`,[req.user.id]);
+      FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$1 ORDER BY last_message_at DESC,c.id DESC`,[req.user.id]);
     res.json({ok:true,conversations:result.rows});
 }));
 app.get("/api/chat/users",requireAuth(async(req,res)=>{
     const q=String(req.query.q||"").trim(),params=[req.user.id,q||null];
-    const result=await pool.query(\`SELECT u.id,u.full_name,u.student_id,u.avatar_url,u.profile_slug FROM users u WHERE u.id<>$1 AND u.is_active=TRUE AND (COALESCE($2,'')='' OR u.full_name ILIKE '%'||$2||'%' OR COALESCE(u.student_id,'') ILIKE '%'||$2||'%') ORDER BY u.full_name ASC LIMIT 50\`,params);
+    const result=await pool.query(`SELECT u.id,u.full_name,u.student_id,u.avatar_url,u.profile_slug FROM users u WHERE u.id<>$1 AND u.is_active=TRUE AND (COALESCE($2,'')='' OR u.full_name ILIKE '%'||$2||'%' OR COALESCE(u.student_id,'') ILIKE '%'||$2||'%') ORDER BY u.full_name ASC LIMIT 50`,params);
     res.json({ok:true,users:result.rows});
 }));
 app.post("/api/chat/conversations",requireAuth(async(req,res)=>{
@@ -1058,7 +1058,7 @@ app.post("/api/chat/conversations",requireAuth(async(req,res)=>{
     if(type!=="direct"&&!name)return res.status(400).json({ok:false,message:"اسم الدردشة مطلوب."});
     if(type==="group"&&memberIds.length<1)return res.status(400).json({ok:false,message:"اختر عضواً واحداً على الأقل."});
     if(type==="direct"){
-        const existing=await pool.query(\`SELECT c.id FROM conversations c JOIN conversation_members a ON a.conversation_id=c.id AND a.user_id=$1 JOIN conversation_members b ON b.conversation_id=c.id AND b.user_id=$2 WHERE c.type='direct' AND (SELECT COUNT(*) FROM conversation_members z WHERE z.conversation_id=c.id)=2 LIMIT 1\`,[req.user.id,memberIds[0]]);
+        const existing=await pool.query(`SELECT c.id FROM conversations c JOIN conversation_members a ON a.conversation_id=c.id AND a.user_id=$1 JOIN conversation_members b ON b.conversation_id=c.id AND b.user_id=$2 WHERE c.type='direct' AND (SELECT COUNT(*) FROM conversation_members z WHERE z.conversation_id=c.id)=2 LIMIT 1`,[req.user.id,memberIds[0]]);
         if(existing.rows.length)return res.json({ok:true,conversation:await getChatSummary(existing.rows[0].id,req.user.id)});
     }
     const targetUsers=memberIds.length?await pool.query("SELECT id FROM users WHERE id=ANY($1::bigint[]) AND is_active=TRUE",[memberIds]):{rows:[]};
@@ -1066,9 +1066,9 @@ app.post("/api/chat/conversations",requireAuth(async(req,res)=>{
     const client=await pool.connect();
     try{
         await client.query("BEGIN");
-        const created=await client.query(\`INSERT INTO conversations(name,description,cover_image_url,hashtags,type,is_private,created_by,host_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id\`,[name,description,cover,hashtags,type,type!=="public",req.user.id,type==="direct"?null:req.user.id]);
+        const created=await client.query(`INSERT INTO conversations(name,description,cover_image_url,hashtags,type,is_private,created_by,host_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,[name,description,cover,hashtags,type,type!=="public",req.user.id,type==="direct"?null:req.user.id]);
         const id=created.rows[0].id;
-        for(const uid of [Number(req.user.id),...memberIds])await client.query(\`INSERT INTO conversation_members(conversation_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(conversation_id,user_id) DO NOTHING\`,[id,uid,(type!=="direct"&&uid===Number(req.user.id))?"host":"member"]);
+        for(const uid of [Number(req.user.id),...memberIds])await client.query(`INSERT INTO conversation_members(conversation_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(conversation_id,user_id) DO NOTHING`,[id,uid,(type!=="direct"&&uid===Number(req.user.id))?"host":"member"]);
         await client.query("COMMIT");
         res.status(201).json({ok:true,conversation:await getChatSummary(id,req.user.id)});
     }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
@@ -1076,7 +1076,7 @@ app.post("/api/chat/conversations",requireAuth(async(req,res)=>{
 app.get("/api/chat/conversations/:id/messages",requireAuth(async(req,res)=>{
     const id=Number(req.params.id),membership=await getChatMembership(id,req.user.id);
     if(!membership)return res.status(403).json({ok:false,message:"لست عضواً في هذه الدردشة."});
-    const result=await pool.query(\`SELECT m.id,m.body,m.image_url,m.audio_url,m.created_at,m.is_read,json_build_object('id',u.id,'full_name',u.full_name,'avatar_url',u.avatar_url,'profile_slug',u.profile_slug) AS sender FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.conversation_id=$1 ORDER BY m.created_at ASC,m.id ASC LIMIT 500\`,[id]);
+    const result=await pool.query(`SELECT m.id,m.body,m.image_url,m.audio_url,m.created_at,m.is_read,json_build_object('id',u.id,'full_name',u.full_name,'avatar_url',u.avatar_url,'profile_slug',u.profile_slug) AS sender FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.conversation_id=$1 ORDER BY m.created_at ASC,m.id ASC LIMIT 500`,[id]);
     await pool.query("UPDATE messages SET is_read=TRUE WHERE conversation_id=$1 AND sender_id<>$2",[id,req.user.id]);
     res.json({ok:true,messages:result.rows});
 }));
@@ -1087,7 +1087,7 @@ app.post("/api/chat/conversations/:id/messages",requireAuth(async(req,res)=>{
     const body=String(req.body.body||"").trim(),imageUrl=String(req.body.image_url||"").trim()||null,audioUrl=String(req.body.audio_url||"").trim()||null;
     if(!body&&!imageUrl&&!audioUrl)return res.status(400).json({ok:false,message:"لا يمكن إرسال رسالة فارغة."});
     if(body.length>4000)return res.status(400).json({ok:false,message:"الرسالة طويلة جداً."});
-    const result=await pool.query(\`INSERT INTO messages(conversation_id,sender_id,body,image_url,audio_url) VALUES($1,$2,$3,$4,$5) RETURNING id,body,image_url,audio_url,created_at,is_read\`,[id,req.user.id,body,imageUrl,audioUrl]);
+    const result=await pool.query(`INSERT INTO messages(conversation_id,sender_id,body,image_url,audio_url) VALUES($1,$2,$3,$4,$5) RETURNING id,body,image_url,audio_url,created_at,is_read`,[id,req.user.id,body,imageUrl,audioUrl]);
     await pool.query("UPDATE conversation_members SET inbox_position_at=NOW() WHERE conversation_id=$1",[id]);
     res.status(201).json({ok:true,message:{...result.rows[0],sender:{id:req.user.id,full_name:req.user.full_name,avatar_url:req.user.avatar_url,profile_slug:req.user.profile_slug}}});
 }));
