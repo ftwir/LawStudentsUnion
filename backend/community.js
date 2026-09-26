@@ -6,30 +6,30 @@ function normalizeSection(value) {
 }
 
 function sanitizeRichHTML(value) {
-    let html=String(value||"").slice(0,50000).replace(/<!--[\\s\\S]*?-->/g,"");
+    let html=String(value||"").slice(0,50000).replace(/<!--[\s\S]*?-->/g,"");
     const allowedTags=new Set(["p","div","br","strong","b","em","i","u","s","h1","h2","h3","blockquote","ul","ol","li","span","font","a"]);
-    html=html.replace(/<\\/?([a-z0-9]+)([^>]*)>/gi,(full,rawTag,rawAttrs)=>{
+    html=html.replace(/<\/?([a-z0-9]+)([^>]*)>/gi,(full,rawTag,rawAttrs)=>{
         const tag=String(rawTag).toLowerCase();
         if(!allowedTags.has(tag)) return "";
         if(full.startsWith("</")) return "</"+tag+">";
         if(tag==="br") return "<br>";
         let attrs="";
         if(tag==="font"){
-            const color=String(rawAttrs||"").match(/(?:^|\\s)color\\s*=\\s*["']?(#[0-9a-f]{3,8})["']?/i);
+            const color=String(rawAttrs||"").match(/(?:^|\s)color\s*=\s*["']?(#[0-9a-f]{3,8})["']?/i);
             if(color) attrs=' color="'+color[1].toLowerCase()+'"';
         }else if(tag==="a"){
-            const href=String(rawAttrs||"").match(/(?:^|\\s)href\\s*=\\s*["'](https?:\\/\\/[^"']+)["']/i);
+            const href=String(rawAttrs||"").match(/(?:^|\s)href\s*=\s*["'](https?:\/\/[^"']+)["']/i);
             if(href) attrs=' href="'+href[1].replace(/&/g,"&amp;").replace(/"/g,"&quot;")+'" target="_blank" rel="noopener noreferrer"';
         }else{
-            const styleMatch=String(rawAttrs||"").match(/(?:^|\\s)style\\s*=\\s*["']([^"']*)["']/i);
+            const styleMatch=String(rawAttrs||"").match(/(?:^|\s)style\s*=\s*["']([^"']*)["']/i);
             if(styleMatch){
                 const safeDecls=[];
                 for(const part of styleMatch[1].split(";")){
-                    const m=part.trim().match(/^(text-align|color|font-weight|font-style|text-decoration)\\s*:\\s*([^;]+)$/i);
+                    const m=part.trim().match(/^(text-align|color|font-weight|font-style|text-decoration)\s*:\s*([^;]+)$/i);
                     if(!m) continue;
                     const val=m[2].trim();
-                    if(/url\\s*\\(|expression\\s*\\(|javascript\\s*:/i.test(val)) continue;
-                    if(m[1].toLowerCase()==="color" && !/^(#[0-9a-f]{3,8}|rgb\\([^)]{1,30}\\)|rgba\\([^)]{1,35}\\)|[a-z]+)$/i.test(val)) continue;
+                    if(/url\s*\(|expression\s*\(|javascript\s*:/i.test(val)) continue;
+                    if(m[1].toLowerCase()==="color" && !/^(#[0-9a-f]{3,8}|rgb\([^)]{1,30}\)|rgba\([^)]{1,35}\)|[a-z]+)$/i.test(val)) continue;
                     safeDecls.push(m[1].toLowerCase()+":"+val);
                 }
                 if(safeDecls.length) attrs=' style="'+safeDecls.join(";")+'"';
