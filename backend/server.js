@@ -9,7 +9,7 @@ const app = express();
 const { createOwnerRouter } = require("./routes/ownerRoutes");
 
 app.use(cors());
-app.use(express.json({ limit: "12mb" }));\n\napp.use("/api/owner", createOwnerRouter(pool));
+app.use(express.json({ limit: "12mb" }));
 
 const PORT = process.env.PORT || 3000;
 
@@ -24,6 +24,8 @@ const pool = new Pool({
         ? { rejectUnauthorized: false }
         : false
 });
+
+app.use("/api/owner", createOwnerRouter(pool));
 
 function hashPassword(password) {
     return new Promise((resolve, reject) => {
