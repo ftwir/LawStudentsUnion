@@ -244,20 +244,26 @@ const moduleExports = function(app, pool, requireAuth) {
     if(!Number.isInteger(id)) return res.status(400).json({ok:false,message:"Invalid conversation."});
     const conversation=await access(id,Number(req.user.id));
     if(!conversation) return res.status(403).json({ok:false,message:"You do not have access to this chat."});
-    const r=await pool.query("SELECT m.id,m.body,m.created_at,m.sender_id,u.full_name AS sender_name,u.avatar_url AS sender_avatar,u.profile_slug AS sender_slug FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.conversation_id=$1 ORDER BY m.created_at ASC LIMIT 300",[id]);
+    const r=await pool.query("SELECT m.id,m.body,m.image_url,m.audio_url,m.created_at,m.sender_id,u.full_name AS sender_name,u.avatar_url AS sender_avatar,u.profile_slug AS sender_slug FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.conversation_id=$1 ORDER BY m.created_at ASC LIMIT 300",[id]);
     await pool.query("UPDATE messages SET is_read=TRUE WHERE conversation_id=$1 AND sender_id<>$2",[id,req.user.id]);
-    res.json({ok:true,conversation,messages:r.rows.map(m=>({id:Number(m.id),body:m.body,created_at:m.created_at,sender:{id:Number(m.sender_id),full_name:m.sender_name,avatar_url:m.sender_avatar,profile_slug:m.sender_slug}}))});
+    res.json({ok:true,conversation,messages:r.rows.map(m=>({id:Number(m.id),body:m.body,image_url:m.image_url||null,audio_url:m.audio_url||null,created_at:m.created_at,sender:{id:Number(m.sender_id),full_name:m.sender_name,avatar_url:m.sender_avatar,profile_slug:m.sender_slug}}))});
   }));
 
   app.post("/api/chat/conversations/:id/messages", requireAuth(async (req,res)=>{
     const id=Number(req.params.id);
     const body=String(req.body.body||"").trim();
-    if(!Number.isInteger(id)||!body||body.length>4000) return res.status(400).json({ok:false,message:"Message must contain 1-4000 characters."});
+    const imageUrl=req.body.image_url||null;
+    const audioUrl=req.body.audio_url||null;
+    const validImage=!imageUrl || (typeof imageUrl==="string" && imageUrl.length<=6500000 && /^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\\r\\n]+$/i.test(imageUrl));
+    const validAudio=!audioUrl || (typeof audioUrl==="string" && audioUrl.length<=2200000 && /^data:audio\/(?:webm|ogg|mp4|mpeg|wav);base64,[A-Za-z0-9+/=\\r\\n]+$/i.test(audioUrl));
+    if(!Number.isInteger(id)||(!body&&!imageUrl&&!audioUrl)||body.length>4000) return res.status(400).json({ok:false,message:"أرسل نصاً أو صورة أو رسالة صوتية."});
+    if(!validImage) return res.status(400).json({ok:false,message:"الصورة غير صالحة أو كبيرة جداً."});
+    if(!validAudio) return res.status(400).json({ok:false,message:"الرسالة الصوتية غير صالحة أو كبيرة جداً."});
     const conversation=await access(id,Number(req.user.id));
     if(!conversation) return res.status(403).json({ok:false,message:"You do not have access to this chat."});
     if(conversation.messaging_paused && !["owner","admin"].includes(req.user.role)) return res.status(423).json({ok:false,message:"تم إيقاف الإرسال مؤقتاً في هذه الدردشة."});
-    const r=await pool.query("INSERT INTO messages(conversation_id,sender_id,body) VALUES($1,$2,$3) RETURNING id,body,created_at",[id,req.user.id,body]);
-    res.status(201).json({ok:true,message:{id:Number(r.rows[0].id),body:r.rows[0].body,created_at:r.rows[0].created_at,sender:{id:Number(req.user.id),full_name:req.user.full_name,avatar_url:req.user.avatar_url,profile_slug:req.user.profile_slug||"u-"+req.user.id}}});
+    const r=await pool.query("INSERT INTO messages(conversation_id,sender_id,body,image_url,audio_url) VALUES($1,$2,$3,$4,$5) RETURNING id,body,image_url,audio_url,created_at",[id,req.user.id,body,imageUrl,audioUrl]);
+    res.status(201).json({ok:true,message:{id:Number(r.rows[0].id),body:r.rows[0].body,image_url:r.rows[0].image_url||null,audio_url:r.rows[0].audio_url||null,created_at:r.rows[0].created_at,sender:{id:Number(req.user.id),full_name:req.user.full_name,avatar_url:req.user.avatar_url,profile_slug:req.user.profile_slug||"u-"+req.user.id}}});
   }));
 };
 
