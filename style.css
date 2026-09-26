@@ -661,6 +661,20 @@ main{
   font-size:28px !important;
 
   box-shadow:0 8px 25px #7b61ff55;
+
+  transition:transform .22s ease, box-shadow .22s ease;
+}
+
+.create-btn:hover{
+  box-shadow:0 10px 30px #7b61ff66;
+}
+
+.create-btn:active{
+  transform:scale(.92);
+}
+
+.create-btn.create-open{
+  transform:rotate(45deg);
 }
 
 /* =========================
