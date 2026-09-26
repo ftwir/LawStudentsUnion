@@ -1610,6 +1610,8 @@ async function page(p, profileIdentifier = null){
         const target=pendingChatId;
         pendingChatId=null;
         await openChat(target);
+      }else if(!active && conversations.length){
+        await openChat(Number(conversations[0].id));
       }
     }
     function renderChatList(filter=''){
@@ -1663,7 +1665,42 @@ async function page(p, profileIdentifier = null){
     document.querySelector('#chatImageButton').onclick=()=>imageInput.click();
     imageInput.onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('اختر صورة أقل من 5MB.');e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{chatImageData=rd.result;chatAudioData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🖼️ صورة مرفقة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment').onclick=()=>{chatImageData=null;imageInput.value='';imagePreview.innerHTML='';};};rd.readAsDataURL(file);};
     document.querySelector('#chatVoiceButton').onclick=async()=>{if(voiceRecorder&&voiceRecorder.state==='recording'){voiceRecorder.stop();return;}if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){alert('تسجيل الصوت غير مدعوم في هذا المتصفح.');return;}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});voiceChunks=[];voiceRecorder=new MediaRecorder(stream);voiceRecorder.ondataavailable=e=>{if(e.data.size)voiceChunks.push(e.data);};voiceRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(voiceChunks,{type:voiceRecorder.mimeType||'audio/webm'});if(blob.size>1600000){alert('الرسالة الصوتية كبيرة جداً. سجل مقطعاً أقصر.');return;}const rd=new FileReader();rd.onload=()=>{chatAudioData=rd.result;chatImageData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🎙️ رسالة صوتية جاهزة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment').onclick=()=>{chatAudioData=null;imagePreview.innerHTML='';};};rd.readAsDataURL(blob);document.querySelector('#chatVoiceButton').textContent='🎙';};voiceRecorder.start();document.querySelector('#chatVoiceButton').textContent='⏹';}catch(error){alert('تعذر الوصول إلى الميكروفون. تأكد من السماح بالميكروفون.');}};
-    document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active){alert('اختر محادثة أولاً.');return;}const input=e.currentTarget.elements.body;const body=input.value.trim();if(!body&&!chatImageData&&!chatAudioData)return;let rr;try{rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body,image_url:chatImageData,audio_url:chatAudioData})});const xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';chatImageData=null;chatAudioData=null;imageInput.value='';if(imagePreview)imagePreview.innerHTML='';await openChat(active.id);await loadConversations();}catch(error){alert(error.message||'تعذر الاتصال بخادم الدردشة.');}};
+    const chatForm=document.querySelector('#chatForm');
+    if(chatForm)chatForm.addEventListener('submit',async e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const input=chatForm.elements.body;
+      const body=String(input?.value||'').trim();
+      if(!active){
+        if(conversations.length) await openChat(Number(conversations[0].id));
+        if(!active){alert('اختر محادثة أولاً.');return;}
+      }
+      if(!body&&!chatImageData&&!chatAudioData){if(input)input.focus();return;}
+      const sendButton=chatForm.querySelector('.chat-send-btn');
+      if(sendButton)sendButton.disabled=true;
+      try{
+        const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},
+          body:JSON.stringify({body,image_url:chatImageData,audio_url:chatAudioData})
+        });
+        const text=await rr.text();
+        let xx={};
+        try{xx=JSON.parse(text);}catch(_){}
+        if(!rr.ok||!xx.ok)throw new Error(xx.message||('تعذر إرسال الرسالة. HTTP '+rr.status));
+        if(input)input.value='';
+        chatImageData=null;
+        chatAudioData=null;
+        if(imageInput)imageInput.value='';
+        if(imagePreview)imagePreview.innerHTML='';
+        await loadConversations();
+        await openChat(active.id);
+      }catch(error){
+        alert(error.message||'تعذر الاتصال بخادم الدردشة.');
+      }finally{
+        if(sendButton)sendButton.disabled=false;
+      }
+    });
     document.querySelector('#closeChatModal').onclick=closeCreateChatModal;
 document.querySelector('#chatModal').onclick=e=>{if(e.target.id==='chatModal')closeCreateChatModal();};
 document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChatModal('direct');};
