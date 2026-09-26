@@ -174,9 +174,20 @@ CREATE TABLE IF NOT EXISTS conversation_members (
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role VARCHAR(20) NOT NULL DEFAULT 'member',
     joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    is_muted BOOLEAN NOT NULL DEFAULT FALSE,
+    inbox_position_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (conversation_id, user_id)
 );
 ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'member';
+ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS inbox_position_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+UPDATE conversation_members cm
+SET inbox_position_at = COALESCE(
+  (SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id = cm.conversation_id),
+  cm.joined_at,
+  NOW()
+)
+WHERE cm.inbox_position_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_conversation_members_user ON conversation_members(user_id, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_members_role ON conversation_members(conversation_id, role);
 UPDATE conversations
