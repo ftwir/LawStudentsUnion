@@ -530,46 +530,8 @@ app.get("/api/schedule", async (req, res) => {
     }
 });
 
-app.post("/api/membership/apply", async (req, res) => {
-    try {
-        const fullName = String(req.body.full_name || "").trim();
-        const studentId = String(req.body.student_id || "").trim();
-        const phone = String(req.body.phone || "").trim();
-        const academicYear = String(req.body.academic_year || "").trim();
-        const email = req.body.email ? String(req.body.email).trim() : null;
-        const note = req.body.note ? String(req.body.note).trim() : null;
-
-        if (!fullName || !studentId || !phone || !academicYear) {
-            return res.status(400).json({ ok: false, message: "الاسم والرقم والهاتف والسنة الدراسية مطلوبة." });
-        }
-        if (fullName.length > 150 || studentId.length > 50 || phone.length > 40 || academicYear.length > 50 || (email && email.length > 255) || (note && note.length > 3000)) {
-            return res.status(400).json({ ok: false, message: "بيانات الطلب طويلة أكثر من المسموح." });
-        }
-
-        const existing = await pool.query(
-            `SELECT id, status FROM registrations
-             WHERE student_id = $1
-             ORDER BY id DESC LIMIT 1`,
-            [studentId]
-        );
-        if (existing.rows.length && existing.rows[0].status === "pending") {
-            return res.status(409).json({ ok: false, message: "يوجد طلب عضوية قيد المراجعة بهذا الرقم." });
-        }
-
-        const result = await pool.query(
-            `INSERT INTO registrations
-             (full_name, student_id, academic_year, email, phone, note, status)
-             VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-             RETURNING id, status, created_at`,
-            [fullName, studentId, academicYear, email, phone, note]
-        );
-
-        res.status(201).json({ ok: true, application: result.rows[0] });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ ok: false, message: "Could not submit membership application." });
-    }
-});
+// Membership applications are handled by backend/server.js.
+// Keeping one registration endpoint avoids route shadowing.
 
 app.get("/api/admin/registrations", requireRoles("admin", "owner"), async (req, res) => {
     try {
