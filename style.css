@@ -1504,3 +1504,11 @@ main,.feed,.chat-list,.chat-messages,.online-hub-list,.community-tabs{
   content-visibility:auto;
   contain-intrinsic-size:1px 120px;
 }
+
+
+/* ===== Interaction hotfix: hidden overlays must never block taps ===== */
+.creation-hub-overlay,.drawer-overlay{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s,visibility .3s}
+.creation-hub-overlay.active,.drawer-overlay.open{opacity:1;visibility:visible;pointer-events:auto}
+#creationHub:not(.open),#drawer:not(.open),#shade:not(.open),#chatModal[hidden],#chatManageModal:not(.open){opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+#creationHub.open,#drawer.open,#shade.open,#chatModal.open,#chatManageModal.open{visibility:visible;pointer-events:auto}
+.feed,.feed-container,.chat-list,.chat-list-container,#chatList{overscroll-behavior-y:contain;will-change:scroll-position;-webkit-overflow-scrolling:touch}
