@@ -2086,37 +2086,53 @@ function throttle(fn,wait=100){
   setInterval(()=>{if(document.visibilityState==='visible')heartbeat();},30000);
   setInterval(()=>{if(document.visibilityState==='visible')updateNotificationDot();},30000);
 
-  const hash = location.hash.replace(/^#/, '');
+  function setPageAddress(p, profileIdentifier=null){
+    let target='#'+p;
+    if(p==='profile'&&profileIdentifier) target='#profile/'+encodeURIComponent(profileIdentifier);
+    if(p==='posts'&&profileIdentifier) target='#post/'+encodeURIComponent(profileIdentifier);
+    if(location.hash!==target) history.pushState({page:p,identifier:profileIdentifier},'',target);
+  }
+
   async function handleHash(){
-    const hash = location.hash.replace(/^#/, '');
+    const hash=location.hash.replace(/^#/,'');
     if(hash.startsWith('profile/')){
-      const identifier = decodeURIComponent(hash.slice('profile/'.length));
-      await page('profile', identifier);
-      return;
+      await page('profile',decodeURIComponent(hash.slice('profile/'.length))); return;
     }
     if(hash.startsWith('post/')){
-      const postId = decodeURIComponent(hash.slice('post/'.length));
+      const postId=decodeURIComponent(hash.slice('post/'.length));
       await page('posts');
-      requestAnimationFrame(() => {
-        const target = document.querySelector('.post[data-post-id="'+CSS.escape(postId)+'"]');
-        if(target){
-          target.scrollIntoView({behavior:'smooth',block:'center'});
-          target.classList.add('hash-target');
-          setTimeout(()=>target.classList.remove('hash-target'),1800);
-        }
+      requestAnimationFrame(()=>{
+        const target=document.querySelector('.post[data-post-id="'+CSS.escape(postId)+'"]');
+        if(target){target.scrollIntoView({behavior:'smooth',block:'center');target.classList.add('hash-target');setTimeout(()=>target.classList.remove('hash-target'),1800);}
       });
       return;
     }
-    /*
-      التطبيق يبدأ دائماً كـGuest
-      إذا لم توجد جلسة صالحة.
-    */
-    await page('home');
+    const allowed=new Set(['home','create','posts','activate','login','announcements','activities','notifications','schedule','chat','online-hub','profile','registration','admin','members','applications','content']);
+    const target=allowed.has(hash)?hash:'home';
+    await page(target);
   }
 
-  await handleHash();
+  const originalPage=page;
+  page=async function(p,profileIdentifier=null){
+    setPageAddress(p,profileIdentifier);
+    return originalPage(p,profileIdentifier);
+  };
 
-  window.addEventListener('hashchange', handleHash);
+  setInterval(async ()=>{
+    if(document.visibilityState!=='visible'||!currentUser)return;
+    try{
+      await updateNotificationDot();
+      if(currentPageName==='notifications') await originalPage('notifications');
+      else if(currentPageName==='applications' && ['admin','owner'].includes(role())) await originalPage('applications');
+      else if(currentPageName==='announcements') await originalPage('announcements');
+      else if(currentPageName==='activities') await originalPage('activities');
+      else if(currentPageName==='schedule') await originalPage('schedule');
+    }catch(error){}
+  },10000);
+
+  await handleHash();
+  window.addEventListener('hashchange',handleHash);
+  window.addEventListener('popstate',handleHash);
 
 })();
 
