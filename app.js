@@ -1,185 +1,761 @@
 const API = 'https://lawstudentsunionapi.onrender.com';
 
-const demo = {
-  announcements: [
-    {
-      title: 'مرحباً بكم في منصة اتحاد طلبة كلية القانون',
-      body: 'هذه النسخة الجديدة تجمع إعلانات الاتحاد والأنشطة والجداول وخدمات الطلبة في مكان واحد.',
-      date: '26 سبتمبر 2026',
-      tag: 'عام'
-    }
-  ],
-  activities: [
-    {
-      title: 'ندوة القانون الدستوري',
-      body: 'ندوة طلابية مفتوحة حول المبادئ الدستورية وتطبيقاتها.',
-      date: 'قريباً',
-      tag: 'ندوة'
-    }
-  ],
-  schedule: [
-    {
-      title: 'الجدول الدراسي',
-      body: 'سيتم تحديث الجداول من لوحة إدارة الاتحاد عند اعتمادها.',
-      date: 'الفصل الحالي',
-      tag: 'جدول'
-    }
-  ]
-};
-
 const app = document.querySelector('#app');
 
 let currentUser = null;
 
+const demo = {
+  announcements: [
+    {
+      title: 'مرحباً بكم في مجتمع اتحاد الطلبة',
+      body: 'هذا هو المجتمع الرسمي لطلبة كلية القانون. تابع الأخبار والمناقشات والأنشطة والفعاليات.',
+      tag: 'مثبت',
+      date: 'اليوم'
+    }
+  ],
+
+  activities: [
+    {
+      title: 'ندوة القانون الدستوري',
+      body: 'ندوة طلابية مفتوحة حول المبادئ الدستورية وتطبيقاتها.',
+      tag: 'ندوة',
+      date: 'قريباً'
+    }
+  ],
+
+  schedule: [
+    {
+      title: 'الجدول الدراسي',
+      body: 'سيتم تحديث الجداول عند اعتمادها.',
+      day_name: 'الفصل الحالي',
+      start_time: '',
+      end_time: '',
+      room: ''
+    }
+  ]
+};
+
 
 /* =========================
-   AUTH / SESSION
+   AUTH
 ========================= */
 
-function getToken() {
+function getToken(){
   return localStorage.getItem('lsu_token') || '';
 }
 
-function setToken(token) {
-  if (token) {
+function setToken(token){
+  if(token){
     localStorage.setItem('lsu_token', token);
-  } else {
+  }else{
     localStorage.removeItem('lsu_token');
   }
 }
 
-async function loadCurrentUser() {
+async function loadCurrentUser(){
+
   const token = getToken();
 
-  if (!token) {
+  if(!token){
     currentUser = null;
+    updateDrawer();
     return null;
   }
 
-  try {
-    const response = await fetch(`${API}/api/auth/me`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      cache: 'no-store'
-    });
+  try{
 
-    const result = await response.json();
-
-    if (result.ok) {
-      currentUser = result.user;
-      return result.user;
-    }
-
-    setToken('');
-    currentUser = null;
-    return null;
-
-  } catch (error) {
-    currentUser = null;
-    return null;
-  }
-}
-
-async function login(identifier, password) {
-  const response = await fetch(`${API}/api/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      identifier,
-      password
-    })
-  });
-
-  const result = await response.json();
-
-  if (!result.ok) {
-    throw new Error(result.message || 'بيانات تسجيل الدخول غير صحيحة.');
-  }
-
-  setToken(result.token);
-  currentUser = result.user;
-
-  return result.user;
-}
-
-async function logout() {
-  const token = getToken();
-
-  try {
-    if (token) {
-      await fetch(`${API}/api/auth/logout`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-    }
-  } catch (error) {
-    // حتى إذا تعذر الاتصال بالخادم، نحذف الجلسة محلياً.
-  }
-
-  setToken('');
-  currentUser = null;
-
-  page('login');
-}
-
-
-/* =========================
-   GENERAL UI
-========================= */
-
-function header(title, sub = '') {
-  return `
-    <div class="section">
-      <div>
-        <h2>${title}</h2>
-        ${sub ? `<div class="date">${sub}</div>` : ''}
-      </div>
-    </div>
-  `;
-}
-
-function cards(items) {
-  return items.map(x => `
-    <article class="card">
-      <span class="tag">${x.tag || 'عام'}</span>
-      <h3>${x.title}</h3>
-      <p>${x.body}</p>
-      <div class="date">${x.date || x.published_at || x.event_date || ''}</div>
-    </article>
-  `).join('') || `
-    <div class="empty">
-      لا توجد بيانات منشورة حالياً.
-    </div>
-  `;
-}
-
-
-/* =========================
-   API DATA
-========================= */
-
-async function getData(action, fallback) {
-  try {
     const response = await fetch(
-      `${API}?action=${action}`,
+      `${API}/api/auth/me`,
       {
-        cache: 'no-store'
+        headers:{
+          Authorization:`Bearer ${token}`
+        },
+        cache:'no-store'
       }
     );
 
     const result = await response.json();
 
-    return result.ok ? result.data : fallback;
+    if(result.ok){
 
-  } catch (error) {
+      currentUser = result.user;
+
+      updateDrawer();
+
+      return currentUser;
+    }
+
+    setToken('');
+    currentUser = null;
+
+  }catch(error){
+
+    /*
+      إذا كان الخادم غير متاح،
+      نبقي المستخدم Guest بدلاً
+      من منعه من دخول التطبيق.
+    */
+
+    currentUser = null;
+  }
+
+  updateDrawer();
+
+  return null;
+}
+
+
+async function login(identifier,password){
+
+  const response = await fetch(
+    `${API}/api/auth/login`,
+    {
+      method:'POST',
+
+      headers:{
+        'Content-Type':'application/json'
+      },
+
+      body:JSON.stringify({
+        identifier,
+        password
+      })
+    }
+  );
+
+  const result = await response.json();
+
+  if(!result.ok){
+
+    throw new Error(
+      result.message ||
+      'بيانات تسجيل الدخول غير صحيحة.'
+    );
+  }
+
+  setToken(result.token);
+
+  currentUser = result.user;
+
+  updateDrawer();
+
+  return currentUser;
+}
+
+
+async function logout(){
+
+  const token = getToken();
+
+  try{
+
+    if(token){
+
+      await fetch(
+        `${API}/api/auth/logout`,
+        {
+          method:'POST',
+
+          headers:{
+            Authorization:`Bearer ${token}`
+          }
+        }
+      );
+    }
+
+  }catch(error){}
+
+  setToken('');
+
+  currentUser = null;
+
+  updateDrawer();
+
+  page('home');
+}
+
+
+/* =========================
+   HELPERS
+========================= */
+
+function role(){
+
+  if(!currentUser){
+    return 'guest';
+  }
+
+  return currentUser.role || 'member';
+}
+
+
+function escapeHTML(value){
+
+  return String(value ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
+
+
+async function getData(action,fallback){
+
+  try{
+
+    const response = await fetch(
+      `${API}?action=${action}`,
+      {
+        cache:'no-store'
+      }
+    );
+
+    const result = await response.json();
+
+    return result.ok
+      ? result.data
+      : fallback;
+
+  }catch(error){
+
     return fallback;
   }
+}
+
+
+/* =========================
+   DRAWER
+========================= */
+
+function updateDrawer(){
+
+  const name =
+    document.querySelector('#drawerName');
+
+  const roleText =
+    document.querySelector('#drawerRole');
+
+  const content =
+    document.querySelector('#drawerContent');
+
+  if(!name || !roleText || !content){
+    return;
+  }
+
+  const r = role();
+
+  const names = {
+    guest:'زائر',
+    member:'عضو',
+    admin:'Admin',
+    owner:'Owner'
+  };
+
+  name.textContent =
+    currentUser?.full_name ||
+    names[r];
+
+  roleText.textContent =
+    names[r];
+
+  let html = `
+
+    <div class="drawer-section">
+      COMMUNITY
+    </div>
+
+    <button class="drawer-item" data-page="home">
+      <span class="drawer-icon">⌂</span>
+      <span>الرئيسية</span>
+    </button>
+
+    <button class="drawer-item" data-page="announcements">
+      <span class="drawer-icon">📢</span>
+      <span>الإعلانات</span>
+    </button>
+
+    <button class="drawer-item" data-page="activities">
+      <span class="drawer-icon">◈</span>
+      <span>الأنشطة والفعاليات</span>
+    </button>
+
+    <button class="drawer-item" data-page="schedule">
+      <span class="drawer-icon">📅</span>
+      <span>الجدول الدراسي</span>
+    </button>
+
+    <button class="drawer-item" data-page="notifications">
+      <span class="drawer-icon">🔔</span>
+      <span>الإشعارات</span>
+    </button>
+
+  `;
+
+
+  if(r === 'guest'){
+
+    html += `
+
+      <div class="drawer-divider"></div>
+
+      <div class="drawer-section">
+        ACCOUNT
+      </div>
+
+      <button class="drawer-item" data-page="login">
+        <span class="drawer-icon">🔐</span>
+        <span>تسجيل الدخول</span>
+      </button>
+
+      <button class="drawer-item" data-page="registration">
+        <span class="drawer-icon">📝</span>
+        <span>طلب العضوية</span>
+      </button>
+
+    `;
+
+  }else{
+
+    html += `
+
+      <div class="drawer-divider"></div>
+
+      <div class="drawer-section">
+        MEMBER
+      </div>
+
+      <button class="drawer-item" data-page="profile">
+        <span class="drawer-icon">👤</span>
+        <span>ملفي الشخصي</span>
+      </button>
+
+      <button class="drawer-item" data-page="chat">
+        <span class="drawer-icon">💬</span>
+        <span>الدردشة</span>
+      </button>
+
+    `;
+  }
+
+
+  if(r === 'admin' || r === 'owner'){
+
+    html += `
+
+      <div class="drawer-divider"></div>
+
+      <div class="drawer-section">
+        MANAGEMENT
+      </div>
+
+      <button class="drawer-item admin"
+              data-page="admin">
+        <span class="drawer-icon">🛡️</span>
+        <span>لوحة الإدارة</span>
+      </button>
+
+      <button class="drawer-item admin"
+              data-page="members">
+        <span class="drawer-icon">👥</span>
+        <span>إدارة الأعضاء</span>
+      </button>
+
+      <button class="drawer-item admin"
+              data-page="applications">
+        <span class="drawer-icon">📋</span>
+        <span>طلبات العضوية</span>
+      </button>
+
+      <button class="drawer-item admin"
+              data-page="content">
+        <span class="drawer-icon">✏️</span>
+        <span>إدارة المحتوى</span>
+      </button>
+
+      <button class="drawer-item admin"
+              data-page="reports">
+        <span class="drawer-icon">🚨</span>
+        <span>البلاغات</span>
+      </button>
+
+    `;
+  }
+
+
+  if(r === 'owner'){
+
+    html += `
+
+      <div class="drawer-divider"></div>
+
+      <div class="drawer-section">
+        OWNER
+      </div>
+
+      <button class="drawer-item owner"
+              data-page="owner">
+        <span class="drawer-icon">👑</span>
+        <span>مركز المالك</span>
+      </button>
+
+      <button class="drawer-item owner"
+              data-page="admins">
+        <span class="drawer-icon">🛡️</span>
+        <span>إدارة الـAdmins</span>
+      </button>
+
+      <button class="drawer-item owner"
+              data-page="users">
+        <span class="drawer-icon">👥</span>
+        <span>جميع المستخدمين</span>
+      </button>
+
+      <button class="drawer-item owner"
+              data-page="private-chats">
+        <span class="drawer-icon">🔒</span>
+        <span>القنوات الخاصة</span>
+      </button>
+
+      <button class="drawer-item owner"
+              data-page="logs">
+        <span class="drawer-icon">📜</span>
+        <span>سجل النظام</span>
+      </button>
+
+      <button class="drawer-item owner"
+              data-page="settings">
+        <span class="drawer-icon">⚙️</span>
+        <span>إعدادات النظام</span>
+      </button>
+
+    `;
+  }
+
+
+  html += `
+
+    <div class="drawer-divider"></div>
+
+    <button class="drawer-item"
+            data-page="about">
+      <span class="drawer-icon">ℹ️</span>
+      <span>عن المجتمع</span>
+    </button>
+
+  `;
+
+
+  if(currentUser){
+
+    html += `
+
+      <button class="drawer-item"
+              id="logoutButton">
+        <span class="drawer-icon">↪</span>
+        <span>تسجيل الخروج</span>
+      </button>
+
+    `;
+  }
+
+
+  content.innerHTML = html;
+
+
+  content
+    .querySelectorAll('[data-page]')
+    .forEach(button => {
+
+      button.onclick = () => {
+
+        page(button.dataset.page);
+
+        drawer(false);
+      };
+
+    });
+
+
+  const logoutButton =
+    document.querySelector('#logoutButton');
+
+  if(logoutButton){
+
+    logoutButton.onclick = () => {
+
+      drawer(false);
+
+      logout();
+    };
+  }
+}
+
+
+/* =========================
+   COMMUNITY HOME
+========================= */
+
+async function renderHome(){
+
+  const announcements =
+    await getData(
+      'announcements',
+      demo.announcements
+    );
+
+  const activities =
+    await getData(
+      'activities',
+      demo.activities
+    );
+
+
+  app.innerHTML = `
+
+    <section class="community-cover"></section>
+
+    <section class="community-info">
+
+      <div class="community-avatar">
+        ⚖
+      </div>
+
+      <h1>
+        اتحاد طلبة كلية القانون
+      </h1>
+
+      <p>
+        المجتمع الطلابي للنقاش والتواصل
+        ومتابعة أخبار الاتحاد والأنشطة والفعاليات.
+      </p>
+
+      <div class="community-stats">
+
+        <div>
+          <strong>Community</strong>
+          <span>المجتمع الرسمي</span>
+        </div>
+
+        <div>
+          <strong>Public</strong>
+          <span>متاح للجميع</span>
+        </div>
+
+        <div>
+          <strong>2026</strong>
+          <span>الموسم الحالي</span>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <div class="community-tabs">
+
+      <button class="active">
+        الرئيسية
+      </button>
+
+      <button>
+        المنشورات
+      </button>
+
+      <button>
+        الأعضاء
+      </button>
+
+      <button>
+        الفعاليات
+      </button>
+
+    </div>
+
+
+    <div class="section-title">
+      <h2>استكشف المجتمع</h2>
+      <span>Community</span>
+    </div>
+
+
+    <div class="community-grid">
+
+      <div class="community-box"
+           data-page="announcements">
+
+        <div class="box-icon">📢</div>
+
+        <strong>الإعلانات</strong>
+
+        <span>
+          أخبار الاتحاد
+        </span>
+
+      </div>
+
+
+      <div class="community-box"
+           data-page="activities">
+
+        <div class="box-icon">🎓</div>
+
+        <strong>الفعاليات</strong>
+
+        <span>
+          الأنشطة والبرامج
+        </span>
+
+      </div>
+
+
+      <div class="community-box"
+           data-page="schedule">
+
+        <div class="box-icon">📚</div>
+
+        <strong>الدراسة</strong>
+
+        <span>
+          الجداول الدراسية
+        </span>
+
+      </div>
+
+
+      <div class="community-box"
+           data-page="registration">
+
+        <div class="box-icon">👥</div>
+
+        <strong>
+          ${currentUser ? 'المجتمع' : 'انضم للمجتمع'}
+        </strong>
+
+        <span>
+          ${currentUser
+            ? 'شارك كعضو'
+            : 'قدم طلب العضوية'}
+        </span>
+
+      </div>
+
+    </div>
+
+
+    <div class="section-title">
+      <h2>آخر المنشورات</h2>
+      <span>Feed</span>
+    </div>
+
+
+    <div class="feed">
+
+      ${announcements.slice(0,3).map(x => `
+
+        <article class="post">
+
+          <div class="post-head">
+
+            <div class="post-avatar">
+              ⚖
+            </div>
+
+            <div class="post-author">
+
+              <strong>
+                اتحاد طلبة كلية القانون
+              </strong>
+
+              <small>
+                ${escapeHTML(
+                  x.date ||
+                  x.published_at ||
+                  'اليوم'
+                )}
+              </small>
+
+            </div>
+
+          </div>
+
+          <div class="post-body">
+
+            <span class="tag">
+              ${escapeHTML(x.tag || 'عام')}
+            </span>
+
+            <h3>
+              ${escapeHTML(x.title)}
+            </h3>
+
+            <p>
+              ${escapeHTML(x.body)}
+            </p>
+
+          </div>
+
+          <div class="post-actions">
+
+            <button>
+              ♡ إعجاب
+            </button>
+
+            <button>
+              💬 تعليق
+            </button>
+
+            <button>
+              ↗ مشاركة
+            </button>
+
+          </div>
+
+        </article>
+
+      `).join('')}
+
+    </div>
+
+
+    <div class="section-title">
+      <h2>الفعاليات القادمة</h2>
+      <span>Events</span>
+    </div>
+
+
+    ${activities.slice(0,2).map(x => `
+
+      <article class="card">
+
+        <span class="tag">
+          ${escapeHTML(x.tag || 'فعالية')}
+        </span>
+
+        <h3>
+          ${escapeHTML(x.title)}
+        </h3>
+
+        <p>
+          ${escapeHTML(x.body)}
+        </p>
+
+      </article>
+
+    `).join('')}
+
+  `;
+
+
+  app
+    .querySelectorAll('[data-page]')
+    .forEach(button => {
+
+      button.onclick = () => {
+        page(button.dataset.page);
+      };
+
+    });
 }
 
 
@@ -187,51 +763,64 @@ async function getData(action, fallback) {
    PAGE ROUTER
 ========================= */
 
-async function page(p) {
+async function page(p){
 
-  document.querySelectorAll('[data-page]').forEach(x => {
-    x.classList.toggle(
-      'active',
-      x.dataset.page === p
-    );
-  });
+  document
+    .querySelectorAll(
+      '[data-page]'
+    )
+    .forEach(x => {
+
+      x.classList.toggle(
+        'active',
+        x.dataset.page === p
+      );
+
+    });
 
 
-  /* =========================
-     LOGIN
-  ========================= */
+  if(p === 'home'){
 
-  if (p === 'login') {
+    await renderHome();
+
+    return;
+  }
+
+
+  if(p === 'login'){
 
     app.innerHTML = `
-      <section class="login-wrap">
+
+      <div class="login-wrap">
 
         <div class="login-card">
 
           <div class="login-logo">
-            ⚖️
+            ⚖
           </div>
 
-          <h1>تسجيل الدخول</h1>
+          <h1>
+            تسجيل الدخول
+          </h1>
 
           <p>
-            الدخول إلى منصة اتحاد طلبة كلية القانون
+            الدخول إلى حسابك في المجتمع.
           </p>
 
-          <form class="form" id="loginForm">
+          <form
+            class="form"
+            id="loginForm"
+          >
 
             <label>
               رقم القيد أو البريد الإلكتروني
 
               <input
-                type="text"
                 name="identifier"
                 required
                 autocomplete="username"
-                placeholder="أدخل رقم القيد أو البريد الإلكتروني"
               >
             </label>
-
 
             <label>
               كلمة المرور
@@ -241,19 +830,15 @@ async function page(p) {
                 name="password"
                 required
                 autocomplete="current-password"
-                placeholder="أدخل كلمة المرور"
               >
             </label>
 
-
             <button
-              type="submit"
-              class="btn gold"
+              class="btn"
               id="loginButton"
             >
               تسجيل الدخول
             </button>
-
 
             <div id="loginStatus"></div>
 
@@ -261,236 +846,186 @@ async function page(p) {
 
         </div>
 
-      </section>
+      </div>
+
     `;
 
 
-    const form = document.querySelector('#loginForm');
-    const button = document.querySelector('#loginButton');
-    const status = document.querySelector('#loginStatus');
+    const form =
+      document.querySelector('#loginForm');
 
-
-    form.onsubmit = async function (event) {
+    form.onsubmit = async event => {
 
       event.preventDefault();
 
-      const formData = new FormData(form);
+      const data =
+        Object.fromEntries(
+          new FormData(form)
+        );
 
-      const identifier =
-        String(formData.get('identifier') || '').trim();
+      const button =
+        document.querySelector('#loginButton');
 
-      const password =
-        String(formData.get('password') || '');
-
-
-      if (!identifier || !password) {
-        status.textContent =
-          'يرجى إدخال بيانات تسجيل الدخول.';
-
-        return;
-      }
-
+      const status =
+        document.querySelector('#loginStatus');
 
       button.disabled = true;
-      button.textContent = 'جارٍ تسجيل الدخول...';
-      status.textContent = '';
 
+      button.textContent =
+        'جارٍ تسجيل الدخول...';
 
-      try {
+      try{
 
-        await login(identifier, password);
+        await login(
+          data.identifier,
+          data.password
+        );
 
-        status.textContent =
-          'تم تسجيل الدخول بنجاح.';
+        page('home');
 
-
-        button.textContent =
-          'تم الدخول ✓';
-
-
-        setTimeout(() => {
-          page('home');
-        }, 600);
-
-
-      } catch (error) {
+      }catch(error){
 
         status.textContent =
-          error.message ||
-          'تعذر تسجيل الدخول.';
-
+          error.message;
 
         button.disabled = false;
+
         button.textContent =
           'تسجيل الدخول';
       }
     };
 
-
     return;
   }
 
 
-  /* =========================
-     HOME
-  ========================= */
+  if(p === 'announcements'){
 
-  if (p === 'home') {
-
-    const announcements =
+    const data =
       await getData(
         'announcements',
         demo.announcements
       );
 
-    const activities =
+    app.innerHTML = `
+
+      <div class="section-title">
+        <h2>الإعلانات</h2>
+        <span>Community</span>
+      </div>
+
+      ${data.map(x => `
+
+        <article class="card">
+
+          <span class="tag">
+            ${escapeHTML(x.tag || 'عام')}
+          </span>
+
+          <h3>
+            ${escapeHTML(x.title)}
+          </h3>
+
+          <p>
+            ${escapeHTML(x.body)}
+          </p>
+
+        </article>
+
+      `).join('')}
+
+    `;
+
+    return;
+  }
+
+
+  if(p === 'activities'){
+
+    const data =
       await getData(
         'activities',
         demo.activities
       );
 
-
-    const userName =
-      currentUser?.full_name
-        ? currentUser.full_name
-        : 'الطالب';
-
-
     app.innerHTML = `
 
-      <section class="hero">
-
-        <h1>
-          مرحباً ${userName}
-        </h1>
-
-        <p>
-          مرحباً بك في منصة اتحاد طلبة كلية القانون.
-          يمكنك من هنا الوصول إلى إعلانات الاتحاد،
-          الأنشطة الطلابية، الجداول والخدمات.
-        </p>
-
-      </section>
-
-
-      <div class="section">
-        <h2>الخدمات السريعة</h2>
+      <div class="section-title">
+        <h2>الأنشطة والفعاليات</h2>
+        <span>Events</span>
       </div>
 
+      ${data.map(x => `
 
-      <div class="grid">
+        <article class="card">
 
-        <div
-          class="quick"
-          data-page="announcements"
-        >
-          📢
-          <strong>الإعلانات</strong>
-          <span>آخر أخبار الاتحاد</span>
-        </div>
+          <span class="tag">
+            ${escapeHTML(x.tag || 'فعالية')}
+          </span>
 
+          <h3>
+            ${escapeHTML(x.title)}
+          </h3>
 
-        <div
-          class="quick"
-          data-page="activities"
-        >
-          🎓
-          <strong>الأنشطة</strong>
-          <span>الفعاليات والبرامج</span>
-        </div>
+          <p>
+            ${escapeHTML(x.body)}
+          </p>
 
+        </article>
 
-        <div
-          class="quick"
-          data-page="schedule"
-        >
-          📅
-          <strong>الجدول</strong>
-          <span>المواعيد الدراسية</span>
-        </div>
-
-
-        <div
-          class="quick"
-          data-page="registration"
-        >
-          📝
-          <strong>التسجيل</strong>
-          <span>بيانات الطالب والطلبات</span>
-        </div>
-
-      </div>
-
-
-      ${header('آخر الإعلانات')}
-
-      ${cards(announcements.slice(0, 3))}
-
-
-      ${header('الأنشطة القادمة')}
-
-      ${cards(activities.slice(0, 2))}
+      `).join('')}
 
     `;
 
-
-    app.querySelectorAll('[data-page]').forEach(x => {
-      x.onclick = () => page(x.dataset.page);
-    });
-
     return;
   }
 
 
-  /* =========================
-     ANNOUNCEMENTS
-  ========================= */
+  if(p === 'notifications'){
 
-  if (p === 'announcements') {
-
-    app.innerHTML =
-      header(
-        'الإعلانات',
-        'آخر ما ينشره اتحاد الطلبة'
-      ) +
-      cards(
-        await getData(
-          'announcements',
-          demo.announcements
-        )
+    const data =
+      await getData(
+        'notifications',
+        []
       );
 
+    app.innerHTML = `
+
+      <div class="section-title">
+        <h2>الإشعارات</h2>
+        <span>Notifications</span>
+      </div>
+
+      ${data.length
+        ? data.map(x => `
+
+          <article class="card">
+
+            <h3>
+              ${escapeHTML(x.title)}
+            </h3>
+
+            <p>
+              ${escapeHTML(x.body)}
+            </p>
+
+          </article>
+
+        `).join('')
+        : `
+          <div class="empty">
+            لا توجد إشعارات حالياً.
+          </div>
+        `
+      }
+
+    `;
+
     return;
   }
 
 
-  /* =========================
-     ACTIVITIES
-  ========================= */
-
-  if (p === 'activities') {
-
-    app.innerHTML =
-      header(
-        'الأنشطة الطلابية',
-        'الفعاليات والبرامج القادمة'
-      ) +
-      cards(
-        await getData(
-          'activities',
-          demo.activities
-        )
-      );
-
-    return;
-  }
-
-
-  /* =========================
-     SCHEDULE
-  ========================= */
-
-  if (p === 'schedule') {
+  if(p === 'schedule'){
 
     const data =
       await getData(
@@ -498,267 +1033,401 @@ async function page(p) {
         demo.schedule
       );
 
+    app.innerHTML = `
 
-    app.innerHTML =
-      header(
-        'الجدول الدراسي',
-        'المواعيد والجداول المعتمدة'
-      ) +
+      <div class="section-title">
+        <h2>الجدول الدراسي</h2>
+        <span>Schedule</span>
+      </div>
 
-      (
-        data.length
+      <div class="schedule-list">
 
-          ? `
-            <div class="schedule-list">
+        ${data.map(x => `
 
-              ${data.map(x => `
+          <article class="schedule-row">
 
-                <article class="schedule-row">
+            <div>
 
-                  <div>
-                    <b>${x.title}</b>
+              <strong>
+                ${escapeHTML(x.title)}
+              </strong>
 
-                    <p>
-                      ${x.body || ''}
-                    </p>
-                  </div>
-
-
-                  <div>
-
-                    <strong>
-                      ${x.day_name || ''}
-                    </strong>
-
-                    <span>
-                      ${(x.start_time || '').slice(0, 5)}
-
-                      ${
-                        x.end_time
-                          ? ' — ' + x.end_time.slice(0, 5)
-                          : ''
-                      }
-                    </span>
-
-                    <small>
-                      ${x.room || ''}
-                    </small>
-
-                  </div>
-
-                </article>
-
-              `).join('')}
+              <p>
+                ${escapeHTML(x.body || '')}
+              </p>
 
             </div>
-          `
 
-          : cards(data)
-      );
+            <div>
 
-    return;
-  }
+              <strong>
+                ${escapeHTML(x.day_name || '')}
+              </strong>
 
+              <span>
+                ${(x.start_time || '').slice(0,5)}
+                ${x.end_time
+                  ? ' — ' + x.end_time.slice(0,5)
+                  : ''}
+              </span>
 
-  /* =========================
-     NOTIFICATIONS
-  ========================= */
+              <small>
+                ${escapeHTML(x.room || '')}
+              </small>
 
-  if (p === 'notifications') {
+            </div>
 
-    app.innerHTML =
-      header(
-        'الإشعارات',
-        'تنبيهات الاتحاد'
-      ) +
+          </article>
 
-      cards(
-        await getData(
-          'notifications',
-          []
-        )
-      );
+        `).join('')}
 
-    return;
-  }
+      </div>
 
-
-  /* =========================
-     ABOUT
-  ========================= */
-
-  if (p === 'about') {
-
-    app.innerHTML =
-      header('عن الاتحاد') +
-
-      `
-        <article class="card">
-
-          <h3>
-            اتحاد طلبة كلية القانون
-          </h3>
-
-          <p>
-            منصة إلكترونية تهدف إلى تسهيل
-            التواصل بين طلبة الكلية واتحادهم،
-            ونشر المعلومات والأنشطة والخدمات
-            الطلابية في مكان واحد.
-          </p>
-
-        </article>
-      `;
+    `;
 
     return;
   }
 
 
-  /* =========================
-     REGISTRATION
-  ========================= */
+  if(p === 'registration'){
 
-  if (p === 'registration') {
+    app.innerHTML = `
 
-    app.innerHTML =
-      header(
-        'تسجيل الطالب',
-        'أدخل بياناتك لإرسال الطلب'
-      ) +
+      <div class="section-title">
 
-      `
-        <form class="card form" id="reg">
+        <h2>
+          طلب العضوية
+        </h2>
 
-          <label>
-            الاسم الكامل
+        <span>
+          Membership
+        </span>
 
-            <input
-              required
-              name="name"
-              placeholder="الاسم الثلاثي"
-            >
-          </label>
+      </div>
 
 
-          <label>
-            رقم القيد
+      <form
+        class="card form"
+        id="membershipForm"
+      >
 
-            <input
-              required
-              name="id"
-              placeholder="رقم القيد"
-            >
-          </label>
+        <label>
+          الاسم الكامل
 
-
-          <label>
-            الفرقة / السنة
-
-            <select name="year">
-
-              <option>الأولى</option>
-              <option>الثانية</option>
-              <option>الثالثة</option>
-              <option>الرابعة</option>
-
-            </select>
-
-          </label>
-
-
-          <label>
-            البريد الإلكتروني
-
-            <input
-              type="email"
-              name="email"
-              placeholder="example@university.edu.ly"
-            >
-          </label>
-
-
-          <label>
-            ملاحظات
-
-            <textarea name="note"></textarea>
-          </label>
-
-
-          <button
-            class="btn gold"
-            type="submit"
+          <input
+            name="full_name"
+            required
+            placeholder="الاسم الكامل"
           >
-            إرسال طلب التسجيل
-          </button>
+        </label>
 
 
-          <div id="status"></div>
+        <label>
+          رقم القيد
 
-        </form>
-      `;
+          <input
+            name="student_id"
+            required
+            placeholder="رقم القيد"
+          >
+        </label>
+
+
+        <label>
+          رقم الهاتف
+
+          <input
+            name="phone"
+            required
+            type="tel"
+            placeholder="رقم الهاتف"
+          >
+        </label>
+
+
+        <label>
+          السنة الدراسية
+
+          <select
+            name="academic_year"
+            required
+          >
+
+            <option value="">
+              اختر السنة الدراسية
+            </option>
+
+            <option>الأولى</option>
+            <option>الثانية</option>
+            <option>الثالثة</option>
+            <option>الرابعة</option>
+
+          </select>
+
+        </label>
+
+
+        <label>
+          البريد الإلكتروني
+
+          <input
+            name="email"
+            type="email"
+            placeholder="اختياري"
+          >
+        </label>
+
+
+        <label>
+          ملاحظات
+
+          <textarea
+            name="note"
+            placeholder="أي معلومات إضافية..."
+          ></textarea>
+        </label>
+
+
+        <button class="btn">
+          إرسال طلب العضوية
+        </button>
+
+        <div id="membershipStatus"></div>
+
+      </form>
+
+    `;
 
 
     const form =
-      document.querySelector('#reg');
+      document.querySelector(
+        '#membershipForm'
+      );
 
-
-    form.onsubmit = async function (event) {
+    form.onsubmit = async event => {
 
       event.preventDefault();
 
       const status =
-        document.querySelector('#status');
+        document.querySelector(
+          '#membershipStatus'
+        );
 
       status.textContent =
         'جارٍ إرسال الطلب...';
 
+      /*
+        نقطة الربط الجديدة مع Backend
+        سنربطها لاحقاً بـ:
+        /api/membership/apply
+      */
 
-      const data =
-        Object.fromEntries(
-          new FormData(form)
-        );
-
-
-      try {
-
-        const response =
-          await fetch(
-            `${API}?action=register`,
-            {
-              method: 'POST',
-
-              headers: {
-                'Content-Type':
-                  'application/json'
-              },
-
-              body: JSON.stringify(data)
-            }
-          );
-
-
-        const result =
-          await response.json();
-
-
-        status.textContent =
-          result.ok
-            ? 'تم إرسال طلبك بنجاح.'
-            : (
-                result.message ||
-                'تعذر إرسال الطلب.'
-              );
-
-
-        if (result.ok) {
-          form.reset();
-        }
-
-      } catch (error) {
-
-        status.textContent =
-          'الخادم غير متصل حالياً. يمكنك المحاولة لاحقاً.';
-      }
+      status.textContent =
+        'تم تجهيز الطلب. سيتم ربطه بلوحة الإدارة في المرحلة التالية.';
     };
+
+    return;
+  }
+
+
+  /*
+    صفحات الأعضاء والإدارة والمالك
+    أصبحت محمية في الواجهة.
+    الربط الحقيقي بالـBackend يأتي
+    في المرحلة التالية.
+  */
+
+  if(
+    ['profile','chat'].includes(p) &&
+    !currentUser
+  ){
+
+    page('login');
+
+    return;
+  }
+
+
+  if(
+    [
+      'admin',
+      'members',
+      'applications',
+      'content',
+      'reports'
+    ].includes(p) &&
+    !['admin','owner'].includes(role())
+  ){
+
+    page('home');
+
+    return;
+  }
+
+
+  if(
+    [
+      'owner',
+      'admins',
+      'users',
+      'private-chats',
+      'logs',
+      'settings'
+    ].includes(p) &&
+    role() !== 'owner'
+  ){
+
+    page('home');
+
+    return;
+  }
+
+
+  if(
+    [
+      'admin',
+      'members',
+      'applications',
+      'content',
+      'reports',
+      'owner',
+      'admins',
+      'users',
+      'private-chats',
+      'logs',
+      'settings'
+    ].includes(p)
+  ){
+
+    const title = {
+
+      admin:'لوحة الإدارة',
+      members:'إدارة الأعضاء',
+      applications:'طلبات العضوية',
+      content:'إدارة المحتوى',
+      reports:'البلاغات',
+
+      owner:'مركز المالك',
+      admins:'إدارة الـAdmins',
+      users:'جميع المستخدمين',
+      'private-chats':'القنوات الخاصة',
+      logs:'سجل النظام',
+      settings:'إعدادات النظام'
+
+    }[p];
+
+
+    app.innerHTML = `
+
+      <div class="section-title">
+        <h2>${title}</h2>
+        <span>
+          ${role() === 'owner'
+            ? 'OWNER'
+            : 'ADMIN'}
+        </span>
+      </div>
+
+      <div class="card">
+
+        <h3>
+          ${title}
+        </h3>
+
+        <p>
+          هذه الواجهة جاهزة ضمن التصميم الجديد،
+          وسيتم ربطها ببيانات قاعدة PostgreSQL
+          وصلاحيات الـAPI في المرحلة التالية.
+        </p>
+
+      </div>
+
+    `;
+
+    return;
+  }
+
+
+  if(p === 'about'){
+
+    app.innerHTML = `
+
+      <div class="section-title">
+        <h2>عن المجتمع</h2>
+      </div>
+
+      <article class="card">
+
+        <h3>
+          اتحاد طلبة كلية القانون
+        </h3>
+
+        <p>
+          مجتمع طلابي للتواصل ومتابعة الأخبار
+          والأنشطة والفعاليات والمناقشات.
+        </p>
+
+      </article>
+
+    `;
+
+    return;
+  }
+
+
+  if(p === 'profile'){
+
+    app.innerHTML = `
+
+      <div class="section-title">
+        <h2>ملفي الشخصي</h2>
+      </div>
+
+      <article class="card">
+
+        <h3>
+          ${escapeHTML(
+            currentUser?.full_name || ''
+          )}
+        </h3>
+
+        <p>
+          رقم القيد:
+          ${escapeHTML(
+            currentUser?.student_id || ''
+          )}
+        </p>
+
+        <p>
+          الصلاحية:
+          ${escapeHTML(
+            currentUser?.role || 'member'
+          )}
+        </p>
+
+      </article>
+
+    `;
+
+    return;
+  }
+
+
+  if(p === 'chat'){
+
+    app.innerHTML = `
+
+      <div class="section-title">
+        <h2>الدردشة</h2>
+        <span>Members</span>
+      </div>
+
+      <div class="empty">
+        سيتم تفعيل غرف الدردشة للأعضاء
+        وربطها بالـBackend في المرحلة التالية.
+      </div>
+
+    `;
 
     return;
   }
@@ -766,27 +1435,31 @@ async function page(p) {
 
 
 /* =========================
-   DRAWER
+   DRAWER CONTROLS
 ========================= */
 
-document
-  .querySelectorAll(
-    '.bottom [data-page], #drawer [data-page]'
-  )
-  .forEach(x => {
+function drawer(open){
 
-    x.onclick = () => {
+  document
+    .querySelector('#drawer')
+    .classList
+    .toggle('open',open);
 
-      page(x.dataset.page);
-
-      drawer(false);
-    };
-  });
+  document
+    .querySelector('#shade')
+    .classList
+    .toggle('open',open);
+}
 
 
 document
   .querySelector('#menu')
-  .onclick = () => drawer(true);
+  .onclick = () => {
+
+    updateDrawer();
+
+    drawer(true);
+  };
 
 
 document
@@ -799,35 +1472,33 @@ document
   .onclick = () => drawer(false);
 
 
-function drawer(value) {
+document
+  .querySelectorAll(
+    '.bottom-nav [data-page], .top-action[data-page]'
+  )
+  .forEach(button => {
 
-  document
-    .querySelector('#drawer')
-    .classList
-    .toggle('open', value);
+    button.onclick = () => {
 
+      page(button.dataset.page);
+    };
 
-  document
-    .querySelector('#shade')
-    .classList
-    .toggle('open', value);
-}
+  });
 
 
 /* =========================
-   START APPLICATION
+   START
 ========================= */
 
-(async function startApp() {
+(async function(){
 
-  const user =
-    await loadCurrentUser();
+  await loadCurrentUser();
 
+  /*
+    التطبيق يبدأ دائماً كـGuest
+    إذا لم توجد جلسة صالحة.
+  */
 
-  if (user) {
-    page('home');
-  } else {
-    page('login');
-  }
+  page('home');
 
 })();
