@@ -1502,8 +1502,7 @@ async function page(p, profileIdentifier = null){
         <section class="card profile-friends-card"><div class="section-title compact"><h3>الأصدقاء</h3><span id="friendsCount">جارٍ التحميل...</span></div><div id="profileFriends" class="profile-friends-list"><div class="empty">جارٍ تحميل الأصدقاء...</div></div></section>
       `;
 
-      document.querySelector('#copyProfileBtn').onclick =
-        () => copyProfileLink(user);
+      document.querySelector('#copyProfileBtn')?.addEventListener('click',()=>copyProfileLink(user));
 
       if(isSelf){
         document.querySelector('#editProfileBtn')?.addEventListener('click',()=>renderProfileEditor(user));
@@ -1888,8 +1887,8 @@ async function renderProfileEditor(user){
     const status = document.querySelector('#profileSaveStatus');
     const button = document.querySelector('#saveProfileBtn');
 
-    button.disabled = true;
-    status.textContent = 'جارٍ حفظ الملف...';
+    if(button) button.disabled = true;
+    if(status) status.textContent = 'جارٍ حفظ الملف...';
 
     try{
       const response = await fetch(`${API}/api/profile`,{
@@ -1926,14 +1925,14 @@ async function renderProfileEditor(user){
       const fresh = await loadPublicProfile(currentUser.profile_slug || currentUser.id);
       currentUser = {...currentUser, ...fresh};
       updateDrawer();
-      status.innerHTML = '<span class="success">تم حفظ الملف الشخصي بنجاح.</span>';
+      if(status) status.innerHTML = '<span class="success">تم حفظ الملف الشخصي بنجاح.</span>';
       setTimeout(() => page('profile', fresh.profile_slug || fresh.id), 250);
 
     }catch(error){
-      status.innerHTML = '<span class="error">'+escapeHTML(error.message)+'</span>';
-      button.disabled = false;
+      if(status) status.innerHTML = '<span class="error">'+escapeHTML(error.message)+'</span>';
+      if(button) button.disabled = false;
     }
-  };
+  });
 }
 
 
