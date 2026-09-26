@@ -151,6 +151,10 @@ CREATE INDEX IF NOT EXISTS idx_posts_pinned ON posts(is_pinned, created_at DESC)
 CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at);
 
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS name VARCHAR(150);
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS type VARCHAR(30) NOT NULL DEFAULT 'direct';
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS conversations (
     id BIGSERIAL PRIMARY KEY,
