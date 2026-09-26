@@ -1427,6 +1427,32 @@ async function ensureOwnerAccount() {
     console.log("Owner account created successfully.");
 }
 
+async function dispatchSelfHealing(error){
+    const stack=String(error?.stack||error||'');
+    const match=stack.match(/(?:file:\/\/)?([^\\s()]+backend[\\/][^\\s():]+)(?::\\d+)?(?::\\d+)?/i);
+    if(!match)return;
+    const raw=match[1].replace(/\\\\/g,'/');
+    const idx=raw.indexOf('backend/');
+    const filePath=idx>=0?raw.slice(idx):null;
+    if(!filePath)return;
+    const url=process.env.SELF_HEALING_AGENT_URL||'http://self-healing-agent.internal/internal/heal';
+    try{
+        await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({error:stack,filePath})});
+    }catch(dispatchError){
+        console.error('Self-healing dispatch failed:',dispatchError.message);
+    }
+}
+
+process.on('uncaughtException',error=>{
+    console.error('UNCAUGHT EXCEPTION:',error);
+    dispatchSelfHealing(error).catch(()=>{}).finally(()=>process.exit(1));
+});
+
+process.on('unhandledRejection',reason=>{
+    console.error('UNHANDLED REJECTION:',reason);
+    dispatchSelfHealing(reason instanceof Error?reason:new Error(String(reason))).catch(()=>{});
+});
+
 async function startServer() {
 
     await initializeDatabase();
