@@ -1277,6 +1277,100 @@ app.delete("/api/posts/:id", requireAuth(async (req, res) => {
     }
 }));
 
+async function getOrCreateCommunityConversation() {
+    const existing = await pool.query(
+        `SELECT id, name, type, is_private
+         FROM conversations
+         WHERE type = 'community' AND is_private = FALSE
+         ORDER BY id ASC
+         LIMIT 1`
+    );
+
+    if (existing.rows.length) return existing.rows[0];
+
+    const created = await pool.query(
+        `INSERT INTO conversations (name, type, is_private)
+         VALUES ('مجتمع الاتحاد', 'community', FALSE)
+         RETURNING id, name, type, is_private`
+    );
+
+    return created.rows[0];
+}
+
+app.get("/api/chat/community", requireAuth(async (req, res) => {
+    try {
+        const conversation = await getOrCreateCommunityConversation();
+
+        const messages = await pool.query(
+            `SELECT m.id, m.body, m.created_at, m.sender_id,
+                    u.full_name AS sender_name, u.avatar_url AS sender_avatar,
+                    u.profile_slug AS sender_slug
+             FROM messages m
+             INNER JOIN users u ON u.id = m.sender_id
+             WHERE m.conversation_id = $1
+               AND u.is_active = TRUE
+             ORDER BY m.created_at DESC
+             LIMIT 100`,
+            [conversation.id]
+        );
+
+        res.json({
+            ok: true,
+            conversation,
+            messages: messages.rows.reverse().map(m => ({
+                id: Number(m.id),
+                body: m.body,
+                created_at: m.created_at,
+                sender: {
+                    id: Number(m.sender_id),
+                    full_name: m.sender_name,
+                    avatar_url: m.sender_avatar,
+                    profile_slug: m.sender_slug || `u-${m.sender_id}`
+                }
+            }))
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not load community chat." });
+    }
+}));
+
+app.post("/api/chat/community/messages", requireAuth(async (req, res) => {
+    try {
+        const body = String(req.body.body || "").trim();
+        if (!body || body.length > 2000) {
+            return res.status(400).json({ ok: false, message: "Message must contain 1-2000 characters." });
+        }
+
+        const conversation = await getOrCreateCommunityConversation();
+
+        const result = await pool.query(
+            `INSERT INTO messages (conversation_id, sender_id, body)
+             VALUES ($1, $2, $3)
+             RETURNING id, body, created_at`,
+            [conversation.id, req.user.id, body]
+        );
+
+        res.status(201).json({
+            ok: true,
+            message: {
+                id: Number(result.rows[0].id),
+                body: result.rows[0].body,
+                created_at: result.rows[0].created_at,
+                sender: {
+                    id: Number(req.user.id),
+                    full_name: req.user.full_name,
+                    avatar_url: req.user.avatar_url,
+                    profile_slug: req.user.profile_slug || `u-${req.user.id}`
+                }
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, message: "Could not send message." });
+    }
+}));
+
 app.get("/api/auth-test", (req, res) => {
     res.send(`
 <!DOCTYPE html>
