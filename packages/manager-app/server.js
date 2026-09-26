@@ -19,35 +19,69 @@ function safeEqual(a, b) {
     return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
 }
 
-function managerAuth(req, res, next) {
-    // Preferred login: HTTP Basic Auth using the same owner credentials
-    // configured in Render as OWNER_LOGIN / OWNER_PASSWORD.
-    const auth = req.headers.authorization || "";
-    if (auth.startsWith("Basic ")) {
-        try {
-            const decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
-            const separator = decoded.indexOf(":");
-            const login = separator >= 0 ? decoded.slice(0, separator) : "";
-            const password = separator >= 0 ? decoded.slice(separator + 1) : "";
-            if (
-                safeEqual(login, process.env.OWNER_LOGIN) &&
-                safeEqual(password, process.env.OWNER_PASSWORD)
-            ) {
-                return next();
-            }
-        } catch (_) {}
-    }
+async function verifyOwnerSession(req) {
+    const authorization = req.headers.authorization || "";
+    if (!authorization.startsWith("Bearer ")) return false;
+    if (!STUDENT_API_URL) return false;
 
-    // Backward-compatible master-passcode authentication.
-    const passcode = process.env.OWNER_MASTER_PASSCODE;
-    const supplied = req.headers["x-owner-master-passcode"];
-    if (passcode && supplied && safeEqual(supplied, passcode)) return next();
-
-    return res.status(401).json({
-        ok: false,
-        message: "Manager authentication required.",
-        hint: "Use the Owner login and password configured in Render."
+    const response = await fetch(STUDENT_API_URL + "/api/owner/status", {
+        headers: { Authorization: authorization, Accept: "application/json" }
     });
+    return response.ok;
+}
+
+async function managerAuth(req, res, next) {
+    try {
+        const passcode = process.env.OWNER_MASTER_PASSCODE;
+        const supplied = req.headers["x-owner-master-passcode"];
+        if (passcode && supplied && safeEqual(supplied, passcode)) return next();
+
+        if (await verifyOwnerSession(req)) return next();
+
+        return res.status(401).json({
+            ok: false,
+            message: "Manager authentication required."
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(401).json({ ok:false, message:"Manager authentication required." });
+    }
+}
+
+app.post("/api/manager/login", async (req, res) => {
+    try {
+        if (!STUDENT_API_URL) return res.status(503).json({ok:false,message:"STUDENT_API_URL is not configured."});
+        const identifier = String(req.body?.identifier || "").trim();
+        const password = String(req.body?.password || "");
+        if (!identifier || !password) return res.status(400).json({ok:false,message:"Identifier and password are required."});
+
+        const response = await fetch(STUDENT_API_URL + "/api/auth/login", {
+            method:"POST",
+            headers:{"Content-Type":"application/json","Accept":"application/json"},
+            body:JSON.stringify({identifier,password})
+        });
+        const data = await response.json().catch(()=>({ok:false,message:"Student API returned an invalid response."}));
+
+        if (!response.ok || !data.ok || !data.token) {
+            return res.status(response.status || 401).json({ok:false,message:data.message || "Invalid login credentials."});
+        }
+        if (data.user?.role !== "owner") {
+            return res.status(403).json({ok:false,message:"This account is not an owner account."});
+        }
+
+        res.json({
+            ok:true,
+            token:data.token,
+            user:{
+                id:data.user.id,
+                full_name:data.user.full_name,
+                role:data.user.role
+            }
+        });
+    } catch(error) {
+        console.error(error);
+        res.status(502).json({ok:false,message:"Could not reach Student API."});
+    }
 }
 
 app.get("/health", (req, res) => {
@@ -92,7 +126,7 @@ app.get("/api/manager/owner-status", managerAuth, async (req, res) => {
 
     try {
         const response = await fetch(`${STUDENT_API_URL}/api/owner/status`, {
-            headers: {"x-owner-master-passcode": process.env.OWNER_MASTER_PASSCODE}
+            headers: { Authorization: req.headers.authorization || "", Accept: "application/json" }
         });
         const data = await response.json();
         res.status(response.status).json(data);
