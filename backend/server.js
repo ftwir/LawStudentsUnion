@@ -327,6 +327,84 @@ app.post("/api/auth/login", async (req, res) => {
             message: "Logout failed."
         });
     }
+});function getBearerToken(req) {
+    const authorization = req.headers.authorization || "";
+
+    if (!authorization.startsWith("Bearer ")) {
+        return null;
+    }
+
+    return authorization.substring(7).trim() || null;
+}
+
+async function getAuthenticatedUser(req) {
+    const token = getBearerToken(req);
+
+    if (!token) {
+        return null;
+    }
+
+    const tokenHash = hashToken(token);
+
+    const result = await pool.query(
+        `SELECT
+            u.id,
+            u.full_name,
+            u.student_id,
+            u.email,
+            u.role,
+            u.is_active,
+            u.created_at,
+            u.last_login
+         FROM sessions s
+         INNER JOIN users u
+            ON u.id = s.user_id
+         WHERE s.token_hash = $1
+           AND s.expires_at > NOW()
+           AND u.is_active = TRUE
+         LIMIT 1`,
+        [tokenHash]
+    );
+
+    return result.rows[0] || null;
+}
+
+function publicUser(user) {
+    return {
+        id: user.id,
+        full_name: user.full_name,
+        student_id: user.student_id,
+        email: user.email,
+        role: user.role,
+        is_active: user.is_active,
+        created_at: user.created_at,
+        last_login: user.last_login
+    };
+}
+
+app.get("/api/auth/me", async (req, res) => {
+    try {
+        const user = await getAuthenticatedUser(req);
+
+        if (!user) {
+            return res.status(401).json({
+                ok: false,
+                message: "Authentication required."
+            });
+        }
+
+        res.json({
+            ok: true,
+            user: publicUser(user)
+        });
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            ok: false,
+            message: "Could not verify session."
+        });
+    }
 });
 
 app.get("/api/auth-test", (req, res) => {
