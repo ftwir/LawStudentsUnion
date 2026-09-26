@@ -20,23 +20,28 @@ pre{white-space:pre-wrap;word-break:break-word}
 <h1>ACM Manager</h1>
 <p>لوحة إدارة منفصلة للتطبيق الأساسي — Owner Agent Control Plane</p>
 <div class="card">
-<label>Owner Master Passcode</label><br><br>
-<input id="passcode" type="password" autocomplete="off" style="width:100%;box-sizing:border-box">
-<br><br><button onclick="connect()">اتصال</button>
+<label>معرف المالك</label><br><br>
+<input id="login" autocomplete="username" style="width:100%;box-sizing:border-box">
+<br><br>
+<label>كلمة مرور المالك</label><br><br>
+<input id="password" type="password" autocomplete="current-password" style="width:100%;box-sizing:border-box">
+<br><br><button onclick="connect()">تسجيل الدخول</button>
 </div>
 <div id="out"></div>
 </main>
 <script>
-let pass="";
+let credentials="";
 function box(title,data){return '<div class="card"><h2>'+title+'</h2><pre>'+JSON.stringify(data,null,2)+'</pre></div>'}
 async function get(url){
- const r=await fetch(url,{headers:{"x-owner-master-passcode":pass}});
+ const r=await fetch(url,{headers:{"Authorization":"Basic "+credentials}});
  const d=await r.json().catch(()=>({message:"Invalid response"}));
  if(!r.ok) throw new Error(d.message||("HTTP "+r.status));
  return d;
 }
 async function connect(){
- pass=document.getElementById("passcode").value;
+ const login=document.getElementById("login").value;
+ const password=document.getElementById("password").value;
+ credentials=btoa(unescape(encodeURIComponent(login+":"+password)));
  const out=document.getElementById("out");
  out.innerHTML="<div class='card'>جارٍ الاتصال...</div>";
  try{
