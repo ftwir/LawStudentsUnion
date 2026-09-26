@@ -920,7 +920,7 @@ function validateImageDataUrl(value) {
 }
 
 async function serializePost(row) {
-    const comments = await pool.query(\`
+    const comments = await pool.query(`
         SELECT c.id, c.body, c.created_at,
                u.id AS author_id, u.full_name AS author_name,
                u.avatar_url AS author_avatar, u.profile_slug AS author_slug
@@ -929,7 +929,7 @@ async function serializePost(row) {
         WHERE c.post_id = $1
         ORDER BY c.created_at ASC
         LIMIT 100
-    \`, [row.id]);
+    `, [row.id]);
 
     return {
         id: Number(row.id),
@@ -944,7 +944,7 @@ async function serializePost(row) {
             id: Number(row.author_id),
             full_name: row.author_name,
             avatar_url: row.author_avatar,
-            profile_slug: row.author_slug || \`u-\${row.author_id}\`
+            profile_slug: row.author_slug || `u-${row.author_id}`
         },
         likes_count: Number(row.likes_count || 0),
         comments_count: Number(row.comments_count || 0),
@@ -957,7 +957,7 @@ async function serializePost(row) {
                 id: Number(comment.author_id),
                 full_name: comment.author_name,
                 avatar_url: comment.author_avatar,
-                profile_slug: comment.author_slug || \`u-\${comment.author_id}\`
+                profile_slug: comment.author_slug || `u-${comment.author_id}`
             }
         }))
     };
@@ -971,7 +971,7 @@ app.get("/api/posts", async (req, res) => {
         const viewer = await getAuthenticatedUser(req);
         const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
 
-        const result = await pool.query(\`
+        const result = await pool.query(`
             SELECT p.id, p.section, p.title, p.body, p.image_url,
                    p.is_pinned, p.created_at, p.updated_at,
                    u.id AS author_id, u.full_name AS author_name,
@@ -987,7 +987,7 @@ app.get("/api/posts", async (req, res) => {
             GROUP BY p.id, u.id
             ORDER BY p.is_pinned DESC, p.created_at DESC
             LIMIT $3
-        \`, [section, viewer ? viewer.id : null, limit]);
+        `, [section, viewer ? viewer.id : null, limit]);
 
         const posts = [];
         for (const row of result.rows) posts.push(await serializePost(row));
@@ -1010,18 +1010,18 @@ app.post("/api/posts", requireAuth(async (req, res) => {
         if (title && title.length > 255) return res.status(400).json({ ok: false, message: "Title is too long." });
         if (!validateImageDataUrl(imageUrl)) return res.status(400).json({ ok: false, message: "Invalid or oversized image." });
 
-        const result = await pool.query(\`
+        const result = await pool.query(`
             INSERT INTO posts (author_id, section, title, body, image_url)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id
-        \`, [req.user.id, section, title || null, body, imageUrl]);
+        `, [req.user.id, section, title || null, body, imageUrl]);
 
-        await pool.query(\`
+        await pool.query(`
             INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
             VALUES ($1, 'post.created', 'post', $2, $3::jsonb)
-        \`, [req.user.id, result.rows[0].id, JSON.stringify({ section, has_image: !!imageUrl })]);
+        `, [req.user.id, result.rows[0].id, JSON.stringify({ section, has_image: !!imageUrl })]);
 
-        const postResult = await pool.query(\`
+        const postResult = await pool.query(`
             SELECT p.id, p.section, p.title, p.body, p.image_url,
                    p.is_pinned, p.created_at, p.updated_at,
                    u.id AS author_id, u.full_name AS author_name,
@@ -1029,7 +1029,7 @@ app.post("/api/posts", requireAuth(async (req, res) => {
                    0::int AS likes_count, 0::int AS comments_count, 0::int AS liked_by_me
             FROM posts p INNER JOIN users u ON u.id = p.author_id
             WHERE p.id = $1
-        \`, [result.rows[0].id]);
+        `, [result.rows[0].id]);
 
         res.status(201).json({ ok: true, message: "Post published successfully.", post: await serializePost(postResult.rows[0]) });
     } catch (error) {
@@ -1043,20 +1043,20 @@ app.post("/api/posts/:id/like", requireAuth(async (req, res) => {
         const postId = Number(req.params.id);
         if (!Number.isInteger(postId)) return res.status(400).json({ ok: false, message: "Invalid post ID." });
 
-        const post = await pool.query(\`SELECT id FROM posts WHERE id = $1 AND is_published = TRUE LIMIT 1\`, [postId]);
+        const post = await pool.query(`SELECT id FROM posts WHERE id = $1 AND is_published = TRUE LIMIT 1`, [postId]);
         if (!post.rows.length) return res.status(404).json({ ok: false, message: "Post not found." });
 
-        const existing = await pool.query(\`SELECT 1 FROM post_likes WHERE post_id = $1 AND user_id = $2\`, [postId, req.user.id]);
+        const existing = await pool.query(`SELECT 1 FROM post_likes WHERE post_id = $1 AND user_id = $2`, [postId, req.user.id]);
         let liked;
         if (existing.rows.length) {
-            await pool.query(\`DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2\`, [postId, req.user.id]);
+            await pool.query(`DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2`, [postId, req.user.id]);
             liked = false;
         } else {
-            await pool.query(\`INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)\`, [postId, req.user.id]);
+            await pool.query(`INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)`, [postId, req.user.id]);
             liked = true;
         }
 
-        const count = await pool.query(\`SELECT COUNT(*)::int AS count FROM post_likes WHERE post_id = $1\`, [postId]);
+        const count = await pool.query(`SELECT COUNT(*)::int AS count FROM post_likes WHERE post_id = $1`, [postId]);
         res.json({ ok: true, liked, likes_count: count.rows[0].count });
     } catch (error) {
         console.error(error);
@@ -1070,13 +1070,13 @@ app.post("/api/posts/:id/comments", requireAuth(async (req, res) => {
         const body = String(req.body.body || "").trim();
         if (!Number.isInteger(postId) || !body || body.length > 2000) return res.status(400).json({ ok: false, message: "Invalid comment." });
 
-        const post = await pool.query(\`SELECT id FROM posts WHERE id = $1 AND is_published = TRUE LIMIT 1\`, [postId]);
+        const post = await pool.query(`SELECT id FROM posts WHERE id = $1 AND is_published = TRUE LIMIT 1`, [postId]);
         if (!post.rows.length) return res.status(404).json({ ok: false, message: "Post not found." });
 
-        const result = await pool.query(\`
+        const result = await pool.query(`
             INSERT INTO post_comments (post_id, author_id, body)
             VALUES ($1, $2, $3) RETURNING id, body, created_at
-        \`, [postId, req.user.id, body]);
+        `, [postId, req.user.id, body]);
 
         res.status(201).json({
             ok: true,
@@ -1088,7 +1088,7 @@ app.post("/api/posts/:id/comments", requireAuth(async (req, res) => {
                     id: Number(req.user.id),
                     full_name: req.user.full_name,
                     avatar_url: req.user.avatar_url,
-                    profile_slug: req.user.profile_slug || \`u-\${req.user.id}\`
+                    profile_slug: req.user.profile_slug || `u-${req.user.id}`
                 }
             }
         });
@@ -1104,14 +1104,14 @@ app.patch("/api/posts/:id/pin", requireRoles("admin", "owner"), async (req, res)
         const pinned = req.body.pinned === true;
         if (!Number.isInteger(postId)) return res.status(400).json({ ok: false, message: "Invalid post ID." });
 
-        const post = await pool.query(\`SELECT id FROM posts WHERE id = $1 LIMIT 1\`, [postId]);
+        const post = await pool.query(`SELECT id FROM posts WHERE id = $1 LIMIT 1`, [postId]);
         if (!post.rows.length) return res.status(404).json({ ok: false, message: "Post not found." });
 
-        await pool.query(\`UPDATE posts SET is_pinned = $1, updated_at = NOW() WHERE id = $2\`, [pinned, postId]);
-        await pool.query(\`
+        await pool.query(`UPDATE posts SET is_pinned = $1, updated_at = NOW() WHERE id = $2`, [pinned, postId]);
+        await pool.query(`
             INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
             VALUES ($1, 'post.pin_changed', 'post', $2, $3::jsonb)
-        \`, [req.user.id, postId, JSON.stringify({ pinned })]);
+        `, [req.user.id, postId, JSON.stringify({ pinned })]);
 
         res.json({ ok: true, is_pinned: pinned });
     } catch (error) {
@@ -1125,18 +1125,18 @@ app.delete("/api/posts/:id", requireAuth(async (req, res) => {
         const postId = Number(req.params.id);
         if (!Number.isInteger(postId)) return res.status(400).json({ ok: false, message: "Invalid post ID." });
 
-        const post = await pool.query(\`SELECT id, author_id FROM posts WHERE id = $1 LIMIT 1\`, [postId]);
+        const post = await pool.query(`SELECT id, author_id FROM posts WHERE id = $1 LIMIT 1`, [postId]);
         if (!post.rows.length) return res.status(404).json({ ok: false, message: "Post not found." });
 
         const ownPost = Number(post.rows[0].author_id) === Number(req.user.id);
         const manager = ["admin", "owner"].includes(req.user.role);
         if (!ownPost && !manager) return res.status(403).json({ ok: false, message: "You do not have permission to delete this post." });
 
-        await pool.query(\`DELETE FROM posts WHERE id = $1\`, [postId]);
-        await pool.query(\`
+        await pool.query(`DELETE FROM posts WHERE id = $1`, [postId]);
+        await pool.query(`
             INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
             VALUES ($1, 'post.deleted', 'post', $2, $3::jsonb)
-        \`, [req.user.id, postId, JSON.stringify({ by_manager: manager })]);
+        `, [req.user.id, postId, JSON.stringify({ by_manager: manager })]);
 
         res.json({ ok: true });
     } catch (error) {
