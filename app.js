@@ -74,6 +74,7 @@ async function loadCurrentUser(){
 
 
 async function login(identifier,password){
+  identifier = String(identifier || '').trim();
 
   const response = await fetch(
     `${API}/api/auth/login`,
@@ -197,6 +198,13 @@ async function getData(action,fallback){
 ========================= */
 
 function updateDrawer(){
+
+  const avatar = document.querySelector('#drawerAvatar');
+  if(avatar){
+    avatar.innerHTML = currentUser?.avatar_url
+      ? '<img src="'+escapeHTML(currentUser.avatar_url)+'" alt="">'
+      : '⚖';
+  }
 
   const name =
     document.querySelector('#drawerName');
@@ -541,9 +549,9 @@ function bindPostEvents(container,section){
 }
 
 async function renderHome(){
-  app.innerHTML='<section class="community-cover"></section><section class="community-info"><div class="community-avatar">⚖</div><h1>اتحاد طلبة كلية القانون</h1><p>المجتمع الطلابي الرسمي للتواصل، الأخبار، الأنشطة والمناقشات بين طلبة كلية القانون.</p><div class="community-stats"><div><strong>Community</strong><span>المجتمع الرسمي</span></div><div><strong>Public</strong><span>متاح للجميع</span></div><div><strong id="onlineCount">—</strong><span>متصل الآن</span></div></div></section><div class="community-tabs"><button class="active" data-section="community">الرئيسية</button><button data-section="announcements">الإعلانات</button><button data-section="activities">الأنشطة</button><button data-section="study">الدراسة</button></div><div class="section-title"><h2>مساحات الاتحاد</h2><span>Sections</span></div><div class="community-grid"><div class="community-box" data-page="announcements"><div class="box-icon">📢</div><strong>الإعلانات</strong><span>أخبار الاتحاد والتنبيهات الرسمية</span></div><div class="community-box" data-page="activities"><div class="box-icon">🎓</div><strong>الأنشطة والفعاليات</strong><span>الندوات والبرامج والأنشطة</span></div><div class="community-box" data-page="schedule"><div class="box-icon">📚</div><strong>الدراسة</strong><span>الجداول والمعلومات الدراسية</span></div><div class="community-box" data-page="posts"><div class="box-icon">💬</div><strong>مجتمع الطلبة</strong><span>منشورات ومناقشات الأعضاء</span></div></div><div class="section-title"><h2>آخر منشورات المجتمع</h2><span>Community Feed</span></div><div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>';
+  app.innerHTML='<section class="community-cover"></section><section class="community-info"><div class="community-avatar">⚖</div><h1>اتحاد طلبة كلية القانون</h1><p>المساحة الرسمية للطلبة: أخبار، فعاليات، دراسة، منشورات وحوار.</p><div class="community-stats"><div><strong>اتحاد</strong><span>المجتمع الرسمي</span></div><div><strong>طلاب</strong><span>تواصل ومشاركة</span></div><div><strong id="onlineCount">—</strong><span>متصل الآن</span></div></div></section><nav class="community-tabs" aria-label="أقسام الاتحاد"><button class="active" data-page="home">الرئيسية</button><button data-page="announcements">الإعلانات</button><button data-page="activities">الأنشطة والفعاليات</button><button data-page="schedule">الجدول</button></nav><div class="home-welcome"><h2>مساحة الاتحاد</h2><p>اكتشف ما يحدث داخل المجتمع وشارك زملاءك دون تحويل الصفحة الرئيسية إلى ملف شخصي.</p></div><div class="section-title"><h2>آخر منشورات المجتمع</h2><span>Community Feed</span></div><div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>';
   app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
-  app.querySelectorAll('[data-section]').forEach(b=>b.onclick=async()=>{app.querySelectorAll('[data-section]').forEach(x=>x.classList.remove('active'));b.classList.add('active');await refreshPostsIn(document.querySelector('#homePosts'),b.dataset.section);});
+  app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
   const count=await getOnlineCount();const el=document.querySelector('#onlineCount');if(el)el.textContent=count;
   await refreshPostsIn(document.querySelector('#homePosts'),'community');
 }
@@ -1012,46 +1020,26 @@ async function page(p, profileIdentifier = null){
   if(p === 'notifications'){
 
     if(!currentUser){ page('login'); return; }
-    const response = await fetch(API+'/api/notifications',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});
-    const payload = await response.json();
-    if(!response.ok||!payload.ok) throw new Error(payload.message||'تعذر تحميل الإشعارات.');
-    const data = payload.notifications || [];
+    const [systemResponse,userResponse,settingsResponse] = await Promise.all([
+      fetch(API+'/api/notifications',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),
+      fetch(API+'/api/user-notifications',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),
+      fetch(API+'/api/notifications/settings',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'})
+    ]);
+    const system = await systemResponse.json();
+    const personal = await userResponse.json();
+    const settingsPayload = await settingsResponse.json();
+    if(!systemResponse.ok || !system.ok) throw new Error(system.message || 'تعذر تحميل الإشعارات.');
+    const data = [...(personal.notifications || []), ...(system.notifications || []).map(x=>({...x,source:'announcement'}))];
 
-    app.innerHTML = `
-
-      <div class="section-title">
-        <h2>الإشعارات</h2>
-        <span>Notifications</span>
-      </div>
-
-      ${data.length
-        ? data.map(x => `
-
-          <article class="card">
-
-            <h3>
-              ${escapeHTML(x.title)}
-            </h3>
-
-            <p>
-              ${escapeHTML(x.body)}
-            </p>
-
-          </article>
-
-        `).join('')
-        : `
-          <div class="empty">
-            لا توجد إشعارات حالياً.
-          </div>
-        `
-      }
-
-    `;
-
+    app.innerHTML = '<div class="section-title"><h2>الإشعارات</h2><button class="btn secondary" id="notificationSettingsBtn">إعدادات الإشعارات</button></div>'+
+      '<section class="card notification-list">'+(data.length ? data.map(x=>'<article class="notification-card"><div><strong>'+escapeHTML(x.title)+'</strong><p>'+escapeHTML(x.body||'')+'</p></div><small>'+escapeHTML(x.source||'announcement')+'</small></article>').join('') : '<div class="empty">لا توجد إشعارات حالياً.</div>')+'</section>'+
+      '<section class="card notification-settings" id="notificationSettings" hidden><h3>مصادر الإشعارات</h3><p>اختر المصادر التي تريد استقبال إشعاراتها.</p>'+
+      ['all_members:كل الأعضاء','administration:الإدارة','friends:الأصدقاء','announcements:صفحة الإعلانات'].map(item=>{const [k,l]=item.split(':');const on=settingsPayload.settings?.[k]!==false;return '<label class="check-row"><input type="checkbox" data-notification-setting="'+k+'" '+(on?'checked':'')+'><span>'+l+'</span></label>';}).join('')+
+      '</section>';
+    document.querySelector('#notificationSettingsBtn').onclick=()=>{document.querySelector('#notificationSettings').hidden=!document.querySelector('#notificationSettings').hidden;};
+    document.querySelectorAll('[data-notification-setting]').forEach(input=>input.onchange=async()=>{const payload={};document.querySelectorAll('[data-notification-setting]').forEach(x=>payload[x.dataset.notificationSetting]=x.checked);await fetch(API+'/api/notifications/settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify(payload)});updateNotificationDot();});
     return;
   }
-
 
   if(p === 'schedule'){
 
@@ -1642,6 +1630,18 @@ function drawer(open){
 }
 
 
+async function updateNotificationDot(){
+  const dot=document.querySelector('#notificationDot');
+  if(!dot || !currentUser) return;
+  try{
+    const r=await fetch(API+'/api/user-notifications',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});
+    const x=await r.json();
+    dot.hidden=!(x.ok && (x.notifications||[]).some(n=>!n.is_read));
+  }catch(e){}
+}
+
+document.querySelector('#bottomMenu').onclick=()=>{ updateDrawer(); drawer(true); };
+
 document
   .querySelector('#menu')
   .onclick = () => {
@@ -1685,6 +1685,7 @@ document
   await loadCurrentUser();
 
   await heartbeat();
+  await updateNotificationDot();
 
   setInterval(heartbeat, 30000);
 
