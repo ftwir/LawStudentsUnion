@@ -815,7 +815,14 @@ async function renderManagementPage(target){
     }
 
     if(target === 'private-chats'){
-      app.innerHTML='<div class="section-title"><h2>القنوات الخاصة</h2><span>Owner</span></div><article class="card"><h3>القنوات الخاصة</h3><p>هذه المساحة محجوزة للقنوات الإدارية الخاصة. سيتم تفعيلها عندما يتم ربط نظام الدردشة الخاص بالاتحاد بالـAPI.</p></article>';
+      const chatData=await adminFetch('/api/chat/private-channels');
+      const channels=chatData.conversations||[];
+      app.innerHTML='<div class="section-title"><div><h2>القنوات الخاصة</h2><span>محادثات الاتحاد الخاصة</span></div><button class="btn" id="ownerCreatePrivateChat">＋ إنشاء دردشة</button></div>'+
+        '<div class="card" id="privateChannelsList">'+
+        (channels.length?channels.map(c=>'<button class="admin-user-row private-channel-row" data-private-chat="'+c.id+'"><div><strong>'+escapeHTML(c.name||'محادثة خاصة')+'</strong><small>'+escapeHTML(c.type==='group'?'مجموعة خاصة':'محادثة خاصة')+' · '+(c.member_count||0)+' أعضاء</small></div><span class="tag">خاصة</span></button>').join(''):'<div class="empty">لا توجد قنوات خاصة بعد.</div>')+
+        '</div>';
+      document.querySelector('#ownerCreatePrivateChat')?.addEventListener('click',async()=>{await page('chat');requestAnimationFrame(()=>openCreateChatModal('group'));});
+      document.querySelectorAll('[data-private-chat]').forEach(b=>b.onclick=async()=>{await page('chat');requestAnimationFrame(async()=>{await loadChatListAndOpen(Number(b.dataset.privateChat));});});
       return;
     }
 
