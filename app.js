@@ -658,7 +658,7 @@ async function adminFetch(path, options = {}) {
 }
 
 function managementGuard(target) {
-  if(['admin','members','content','reports'].includes(target) && !['admin','owner'].includes(role())) return false;
+  if(['admin','members','applications','content','reports'].includes(target) && !['admin','owner'].includes(role())) return false;
   if(['owner','admins','users','private-chats','logs','settings'].includes(target) && role() !== 'owner') return false;
   return true;
 }
