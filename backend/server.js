@@ -977,6 +977,26 @@ require("./community")(app, pool, requireAuth, requireRoles, getAuthenticatedUse
 require("./social")(app, pool, requireAuth);
 
 
+
+app.post("/api/polls", requireAuth(async (req,res)=>{
+  const question=String(req.body.question||"").trim();
+  const options=Array.isArray(req.body.options)?req.body.options.map(x=>String(x||"").trim()).filter(Boolean).slice(0,8):[];
+  if(question.length<2||options.length<2) return res.status(400).json({ok:false,message:"السؤال وخياران على الأقل مطلوبان."});
+  const r=await pool.query("INSERT INTO polls(author_id,question,options) VALUES($1,$2,$3::jsonb) RETURNING id,question,options,created_at",[req.user.id,question,JSON.stringify(options)]);
+  res.status(201).json({ok:true,poll:r.rows[0]});
+});
+app.get("/api/polls", async (req,res)=>{
+  const r=await pool.query("SELECT p.id,p.question,p.options,p.created_at,u.full_name,u.avatar_url FROM polls p JOIN users u ON u.id=p.author_id ORDER BY p.created_at DESC LIMIT 50");
+  res.json({ok:true,polls:r.rows});
+});
+app.post("/api/polls/:id/vote", requireAuth(async (req,res)=>{
+  const id=Number(req.params.id), option=Number(req.body.option_index);
+  if(!Number.isInteger(id)||!Number.isInteger(option)) return res.status(400).json({ok:false,message:"تصويت غير صالح."});
+  const p=await pool.query("SELECT options FROM polls WHERE id=$1",[id]);
+  if(!p.rows.length||option<0||option>=p.rows[0].options.length) return res.status(404).json({ok:false,message:"الخيار غير موجود."});
+  await pool.query("INSERT INTO poll_votes(poll_id,user_id,option_index) VALUES($1,$2,$3) ON CONFLICT(poll_id,user_id) DO UPDATE SET option_index=EXCLUDED.option_index",[id,req.user.id,option]);
+  res.json({ok:true});
+});
 app.patch("/api/user-notifications/:id/read", requireAuth(async (req,res)=>{
     const id=Number(req.params.id);
     if(!Number.isInteger(id)) return res.status(400).json({ok:false,message:"Invalid notification."});
