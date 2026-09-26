@@ -118,15 +118,33 @@ async function commitGithubFile(filePath, source, replacement, sha, message) {
         new Function(replacement);
     }
     const token = process.env.GITHUB_TOKEN;
+    if (!token) throw new Error("GITHUB_TOKEN is not configured");
     const [owner, repo] = GITHUB_REPO.split("/");
+    if (!owner || !repo) throw new Error("Invalid GITHUB_REPO");
     const octokit = new Octokit({ auth: token });
-    const result = await octokit.rest.repos.createOrUpdateFileContents({
-        owner, repo, path:filePath, message, content:Buffer.from(replacement,"utf8").toString("base64"),
-        sha, branch:GITHUB_REF
+    const baseBranch = String(GITHUB_REF).replace(/^refs\/heads\//, "");
+    const branchName = "ai-repair/" + Date.now() + "-" +
+        String(filePath).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+    const base = await octokit.rest.repos.getBranch({ owner, repo, branch: baseBranch });
+    await octokit.rest.git.createRef({
+        owner, repo, ref: "refs/heads/" + branchName, sha: base.data.commit.sha
     });
-    return result.data.commit.sha;
+    const result = await octokit.rest.repos.createOrUpdateFileContents({
+        owner, repo, path:filePath, message,
+        content:Buffer.from(replacement,"utf8").toString("base64"),
+        sha, branch:branchName
+    });
+    const pull = await octokit.rest.pulls.create({
+        owner, repo, title:"AI repair: " + filePath, head:branchName, base:baseBranch,
+        body:"Automated repair proposed by the self-healing execution agent.\n\nFile: " + filePath + "\nThe repair was staged on a dedicated branch and requires review before entering the base branch."
+    });
+    return {
+        commitSha:result.data.commit.sha,
+        branch:branchName,
+        pullRequestNumber:pull.data.number,
+        pullRequestUrl:pull.data.html_url
+    };
 }
-
 // Shared owner identity: the ACM never stores a second owner password.
 // /api/manager/login always delegates authentication to the main API.
 app.post("/api/manager/login", async (req, res) => {
@@ -174,8 +192,8 @@ app.post("/internal/agent/execute", async (req, res) => {
             filePath, current.content, analysis.replacement_code, current.sha,
             "AI repair: " + filePath
         );
-        console.log(JSON.stringify({type:"gemini-repair",filePath,commitSha,rootCause:analysis.root_cause}));
-        res.json({ok:true,provider:"gemini",model:GEMINI_MODEL,filePath,commitSha,analysis});
+        console.log(JSON.stringify({type:"gemini-repair",filePath,commitSha:commitSha.commitSha||null,branch:commitSha.branch||null,pullRequestNumber:commitSha.pullRequestNumber||null,pullRequestUrl:commitSha.pullRequestUrl||null,rootCause:analysis.root_cause}));
+        res.json({ok:true,provider:"gemini",model:GEMINI_MODEL,filePath,staged:commitSha,analysis});
     } catch (error) {
         console.error("Gemini executor failed:", error);
         res.status(502).json({ok:false,message:error.message});
