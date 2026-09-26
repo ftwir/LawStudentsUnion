@@ -70,6 +70,30 @@ app.get("/api/test", async (req, res) => {
     }
 });
 
+app.get("/api/tables", async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+            AND table_type = 'BASE TABLE'
+            ORDER BY table_name;
+        `);
+
+        res.json({
+            ok: true,
+            tables: result.rows.map(row => row.table_name)
+        });
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            ok: false,
+            message: "Could not read database tables."
+        });
+    }
+});
+
 async function initializeDatabase() {
     try {
         const schemaPath = path.join(__dirname, "schema.sql");
