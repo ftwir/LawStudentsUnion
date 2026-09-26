@@ -873,7 +873,7 @@ async function renderManagementPage(target){
       const payload = await r.json();
       const settings = payload.settings || {};
       app.innerHTML='<div class="section-title"><h2>إعدادات النظام</h2><span>Owner</span></div><form class="card form" id="ownerSiteSettings"><label>عنوان الصفحة الرئيسية<input name="home_title" value="'+escapeHTML(settings.home_title || 'اتحاد طلبة كلية القانون')+'"></label><label>وصف الصفحة الرئيسية<textarea name="home_intro">'+escapeHTML(settings.home_intro || '')+'</textarea></label><label>عنوان قسم عن المجتمع<input name="about_title" value="'+escapeHTML(settings.about_title || 'اتحاد طلبة كلية القانون')+'"></label><label>نص قسم عن المجتمع<textarea name="about_body">'+escapeHTML(settings.about_body || '')+'</textarea></label><button class="btn">حفظ التغييرات</button><div id="ownerSiteStatus"></div></form>';
-      document.querySelector('#ownerSiteSettings').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());const response=await fetch(API+'/api/app-settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify(data)});const result=await response.json();document.querySelector('#ownerSiteStatus').innerHTML=response.ok&&result.ok?'<span class="success">تم حفظ النصوص.</span>':'<span class="error">'+escapeHTML(result.message||'تعذر الحفظ.')+'</span>';};
+      document.querySelector('#ownerSiteSettings')?.addEventListener('submit',async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());const response=await fetch(API+'/api/app-settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify(data)});const result=await response.json();const status=document.querySelector('#ownerSiteStatus');if(status)status.innerHTML=response.ok&&result.ok?'<span class="success">تم حفظ النصوص.</span>':'<span class="error">'+escapeHTML(result.message||'تعذر الحفظ.')+'</span>';});
       return;
     }
 
@@ -1506,7 +1506,7 @@ async function page(p, profileIdentifier = null){
         () => copyProfileLink(user);
 
       if(isSelf){
-        document.querySelector('#editProfileBtn').onclick = () => renderProfileEditor(user);
+        document.querySelector('#editProfileBtn')?.addEventListener('click',()=>renderProfileEditor(user));
       }
       try{const rr=await fetch(API+'/api/friends',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});const xx=await rr.json();const friends=xx.friends||[];const fb=document.querySelector('#profileFriends'),fc=document.querySelector('#friendsCount');if(fc)fc.textContent=friends.length+' صديق';if(fb)fb.innerHTML=friends.length?friends.map(f=>'<button class="profile-friend" data-profile="'+escapeHTML(f.profile_slug||f.id)+'"><span class="profile-friend-avatar">'+(f.avatar_url?'<img src="'+escapeHTML(f.avatar_url)+'" alt="">':'👤')+'</span><span><strong>'+escapeHTML(f.full_name)+'</strong><small>'+escapeHTML(f.academic_year||'عضو الاتحاد')+'</small></span></button>').join(''):'<div class="empty">لا توجد صداقات بعد.</div>';fb?.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>openProfile(b.dataset.profile));}catch(e){}
       if(!isSelf){
@@ -1844,7 +1844,7 @@ async function renderProfileEditor(user){
   let avatarData = user.avatar_url || null;
   let coverData = user.profile_background_url || null;
 
-  document.querySelector('#avatarInput').onchange = event => {
+  document.querySelector('#avatarInput')?.addEventListener('change',event=>{
     const file = event.target.files?.[0];
     if(!file) return;
 
@@ -1861,9 +1861,9 @@ async function renderProfileEditor(user){
       if(preview) preview.innerHTML = `<img src="${escapeHTML(avatarData)}" alt="preview">`;
     };
     reader.readAsDataURL(file);
-  };
+  });
 
-  document.querySelector('#coverInput').onchange = event => {
+  document.querySelector('#coverInput')?.addEventListener('change',event=>{
     const file = event.target.files?.[0];
     if(!file) return;
     if(file.size > 3500000){
@@ -1878,9 +1878,9 @@ async function renderProfileEditor(user){
       if(preview) preview.innerHTML = `<img src="${escapeHTML(coverData)}" alt="preview">`;
     };
     reader.readAsDataURL(file);
-  };
+  });
 
-  document.querySelector('#profileForm').onsubmit = async event => {
+  document.querySelector('#profileForm')?.addEventListener('submit',async event=>{
     event.preventDefault();
 
     const form = event.currentTarget;
