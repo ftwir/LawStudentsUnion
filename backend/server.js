@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 
@@ -68,8 +70,33 @@ app.get("/api/test", async (req, res) => {
     }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(
-        `Law Students Union API running on port ${PORT}`
-    );
-});
+async function initializeDatabase() {
+    try {
+        const schemaPath = path.join(__dirname, "schema.sql");
+
+        const schema = fs.readFileSync(
+            schemaPath,
+            "utf8"
+        );
+
+        await pool.query(schema);
+
+        console.log("Database schema initialized successfully.");
+    } catch (error) {
+        console.error("Database initialization failed:");
+        console.error(error);
+        process.exit(1);
+    }
+}
+
+async function startServer() {
+    await initializeDatabase();
+
+    app.listen(PORT, "0.0.0.0", () => {
+        console.log(
+            `Law Students Union API running on port ${PORT}`
+        );
+    });
+}
+
+startServer();
