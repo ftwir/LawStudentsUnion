@@ -196,3 +196,18 @@ CREATE TABLE IF NOT EXISTS app_settings (key VARCHAR(120) PRIMARY KEY, value JSO
 CREATE TABLE IF NOT EXISTS user_notifications (id BIGSERIAL PRIMARY KEY, recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL, kind VARCHAR(40) NOT NULL, title VARCHAR(255) NOT NULL, body TEXT, source VARCHAR(30) NOT NULL DEFAULT 'member', reference_type VARCHAR(40), reference_id BIGINT, is_read BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_user_notifications_recipient ON user_notifications(recipient_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS friendships (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status VARCHAR(20) NOT NULL DEFAULT 'accepted', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (user_id, friend_id), CHECK (user_id <> friend_id));
+
+
+CREATE TABLE IF NOT EXISTS membership_activation_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    registration_id BIGINT NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_membership_activation_registration ON membership_activation_tokens(registration_id);
+
+CREATE INDEX IF NOT EXISTS idx_friendships_friend_status ON friendships(friend_id, status);
+CREATE INDEX IF NOT EXISTS idx_conversation_members_user ON conversation_members(user_id, conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_date ON messages(conversation_id, created_at DESC);
