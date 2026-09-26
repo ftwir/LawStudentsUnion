@@ -1430,21 +1430,60 @@ async function page(p, profileIdentifier = null){
 
 
   if(p === 'chat'){
+    if(!currentUser){ page('login'); return; }
 
     app.innerHTML = `
-
-      <div class="section-title">
-        <h2>الدردشة</h2>
-        <span>Members</span>
-      </div>
-
-      <div class="empty">
-        سيتم تفعيل غرف الدردشة للأعضاء
-        وربطها بالـBackend في المرحلة التالية.
-      </div>
-
+      <div class="section-title"><h2>دردشة الاتحاد</h2><span>Members</span></div>
+      <article class="card chat-shell">
+        <div class="chat-header"><strong>مجتمع الاتحاد</strong><small>مساحة عامة لأعضاء الاتحاد</small></div>
+        <div id="chatMessages" class="chat-messages"><div class="empty">جارٍ تحميل الرسائل...</div></div>
+        <form id="chatForm" class="chat-form">
+          <input name="body" maxlength="2000" placeholder="اكتب رسالتك..." required autocomplete="off">
+          <button class="btn">إرسال</button>
+        </form>
+      </article>
     `;
 
+    const messagesBox=document.querySelector('#chatMessages');
+    const form=document.querySelector('#chatForm');
+
+    const loadChat=async()=>{
+      try{
+        const response=await fetch(API+'/api/chat/community',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'});
+        const data=await response.json();
+        if(!response.ok||!data.ok)throw new Error(data.message||'تعذر تحميل الدردشة.');
+        messagesBox.innerHTML=(data.messages||[]).length ? data.messages.map(m=>{
+          const mine=Number(m.sender.id)===Number(currentUser.id);
+          return '<div class="chat-message '+(mine?'mine':'')+'"><div class="chat-message-author">'+escapeHTML(m.sender.full_name)+'</div><div class="chat-message-body">'+escapeHTML(m.body)+'</div><small>'+escapeHTML(new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'}))+'</small></div>';
+        }).join('') : '<div class="empty">لا توجد رسائل بعد. ابدأ المحادثة.</div>';
+        messagesBox.scrollTop=messagesBox.scrollHeight;
+      }catch(e){
+        messagesBox.innerHTML='<div class="empty">'+escapeHTML(e.message)+'</div>';
+      }
+    };
+
+    form.onsubmit=async(event)=>{
+      event.preventDefault();
+      const input=form.elements.body;
+      const body=input.value.trim();
+      if(!body)return;
+      const button=form.querySelector('button');
+      button.disabled=true;
+      try{
+        const response=await fetch(API+'/api/chat/community/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},
+          body:JSON.stringify({body})
+        });
+        const data=await response.json();
+        if(!response.ok||!data.ok)throw new Error(data.message||'تعذر إرسال الرسالة.');
+        input.value='';
+        await loadChat();
+      }catch(e){alert(e.message);}
+      finally{button.disabled=false;input.focus();}
+    };
+
+    await loadChat();
     return;
   }
 }
