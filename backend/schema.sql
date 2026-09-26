@@ -174,6 +174,19 @@ CREATE TABLE IF NOT EXISTS conversation_members (
 ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'member';
 CREATE INDEX IF NOT EXISTS idx_conversation_members_user ON conversation_members(user_id, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_members_role ON conversation_members(conversation_id, role);
+UPDATE conversations
+SET host_user_id = created_by
+WHERE host_user_id IS NULL
+  AND type <> 'direct'
+  AND created_by IS NOT NULL;
+
+UPDATE conversation_members cm
+SET role='host'
+FROM conversations c
+WHERE cm.conversation_id=c.id
+  AND c.host_user_id=cm.user_id
+  AND c.type <> 'direct'
+  AND cm.role='member';
 
 CREATE TABLE IF NOT EXISTS messages (
     id BIGSERIAL PRIMARY KEY,
