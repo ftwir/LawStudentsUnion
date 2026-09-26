@@ -820,10 +820,11 @@ async function renderManagementPage(target){
       const channels=chatData.conversations||[];
       app.innerHTML='<div class="section-title"><div><h2>القنوات الخاصة</h2><span>محادثات الاتحاد الخاصة</span></div><button class="btn" id="ownerCreatePrivateChat">＋ إنشاء دردشة</button></div>'+
         '<div class="card" id="privateChannelsList">'+
-        (channels.length?channels.map(c=>'<button class="admin-user-row private-channel-row" data-private-chat="'+c.id+'"><div><strong>'+escapeHTML(c.name||'محادثة خاصة')+'</strong><small>'+escapeHTML(c.type==='group'?'مجموعة خاصة':'محادثة خاصة')+' · '+(c.member_count||0)+' أعضاء</small></div><span class="tag">خاصة</span></button>').join(''):'<div class="empty">لا توجد قنوات خاصة بعد.</div>')+
+        (channels.length?channels.map(c=>'<div class="admin-user-row private-channel-row"><button class="private-channel-open" data-private-chat="'+c.id+'"><div><strong>'+escapeHTML(c.name||'محادثة خاصة')+'</strong><small>'+escapeHTML(c.type==='group'?'مجموعة خاصة':'محادثة خاصة')+' · '+(c.member_count||0)+' أعضاء</small></div></button><button class="chat-delete-btn" type="button" data-delete-private="'+c.id+'">حذف</button></div>').join(''):'<div class="empty">لا توجد قنوات خاصة بعد.</div>')+
         '</div>';
       document.querySelector('#ownerCreatePrivateChat')?.addEventListener('click',async()=>{await page('chat');requestAnimationFrame(()=>openCreateChatModal('group'));});
       document.querySelectorAll('[data-private-chat]').forEach(b=>b.onclick=async()=>{pendingChatId=Number(b.dataset.privateChat);await page('chat');});
+      document.querySelectorAll('[data-delete-private]').forEach(b=>b.onclick=async()=>{if(!confirm('سيتم حذف هذه الدردشة ورسائلها نهائياً. هل تريد المتابعة؟'))return;b.disabled=true;try{const rr=await fetch(API+'/api/chat/conversations/'+b.dataset.deletePrivate,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر حذف الدردشة.');await renderManagementPage('private-chats');}catch(error){alert(error.message);b.disabled=false;}});
       return;
     }
 
