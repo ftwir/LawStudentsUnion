@@ -52,7 +52,6 @@ form.addEventListener("submit",async event=>{
   const data=await response.json().catch(()=>({ok:false,message:"تعذر قراءة استجابة الخادم."}));
   if(!response.ok||!data.ok)throw new Error(data.message||"بيانات الدخول غير صحيحة.");
   sessionStorage.setItem("acm_owner_token",data.token);
-  message.className="success";message.textContent="تم التحقق من حساب المالك بنجاح. جارٍ فتح لوحة التحكم...";
   message.className="success";
   message.textContent="تم التحقق من حساب المالك بنجاح. جلسة المالك محفوظة في هذه الصفحة. يمكنك متابعة لوحة التحكم.";
   form.style.display="none";
