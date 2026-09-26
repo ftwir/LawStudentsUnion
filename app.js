@@ -2041,7 +2041,7 @@ function drawer(open){
 }
 
 
-async function updateNotificationDot(){
+window.updateNotificationDot = async function updateNotificationDot(){
   const dot=document.querySelector('#notificationDot');
   if(!dot || !currentUser) return;
   try{
