@@ -928,7 +928,7 @@ async function page(p, profileIdentifier = null){
             </button>
 
             <div id="loginStatus"></div>
-
+            <button type="button" class="text-link" id="activateLink">تم قبول عضويتي؟ إعداد كلمة المرور</button>
           </form>
 
         </div>
@@ -940,6 +940,8 @@ async function page(p, profileIdentifier = null){
 
     const form =
       document.querySelector('#loginForm');
+
+    document.querySelector('#activateLink').onclick=()=>page('activate');
 
     form.onsubmit = async event => {
 
