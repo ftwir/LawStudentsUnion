@@ -8,7 +8,7 @@ const crypto = require("crypto");
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "12mb" }));
 
 const PORT = process.env.PORT || 3000;
 
@@ -687,9 +687,9 @@ app.put("/api/profile", requireAuth(async (req, res) => {
                  academic_year = $3,
                  bio = $4,
                  email = $5,
-                 avatar_url = $6,
+                 avatar_url = $6::text,
                  profile_background_url = CASE
-                    WHEN $6 IS NOT NULL THEN $6
+                    WHEN $6::text IS NOT NULL THEN $6::text
                     ELSE profile_background_url
                  END,
                  privacy_settings = $7::jsonb,
