@@ -250,6 +250,7 @@ ALTER TABLE polls ADD COLUMN IF NOT EXISTS anonymous BOOLEAN NOT NULL DEFAULT FA
 ALTER TABLE polls ADD COLUMN IF NOT EXISTS results_visibility VARCHAR(20) NOT NULL DEFAULT 'after_vote';
 ALTER TABLE polls ADD COLUMN IF NOT EXISTS expiration_notified_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_polls_closes_at ON polls(closes_at) WHERE closes_at IS NOT NULL;
+UPDATE polls SET closes_at = created_at + (duration_minutes * INTERVAL '1 minute') WHERE closes_at IS NULL;
 CREATE TABLE IF NOT EXISTS poll_votes (
  poll_id BIGINT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
