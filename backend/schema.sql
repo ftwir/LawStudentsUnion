@@ -28,6 +28,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_slug VARCHAR(100);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_settings JSONB NOT NULL DEFAULT '{"show_email":false,"show_phone":false,"show_online":true}'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_settings JSONB NOT NULL DEFAULT '{"push":true,"announcements":true,"messages":true}'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS current_page VARCHAR(80);
 
 UPDATE users
 SET privacy_settings = '{"show_email":false,"show_phone":false,"show_online":true}'::jsonb
