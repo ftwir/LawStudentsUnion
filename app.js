@@ -788,7 +788,7 @@ async function renderManagementPage(target){
       const renderUsers = () => {
         const q=(document.querySelector('#userSearch')?.value||'').trim().toLowerCase();
         const filtered=visible.filter(u => !q || [u.full_name,u.student_id,u.email,u.academic_year].some(v=>String(v||'').toLowerCase().includes(q)));
-        document.querySelector('#usersList').innerHTML = filtered.length ? filtered.map(u =>
+        document.querySelector('#usersList') && (document.querySelector('#usersList').innerHTML = filtered.length ? filtered.map(u =>
           '<div class="admin-user-row">'+
             '<div><strong>'+escapeHTML(u.full_name)+'</strong><small>'+escapeHTML(u.student_id||'—')+' · '+escapeHTML(u.academic_year||'غير محددة')+'</small></div>'+
             '<div class="admin-user-meta"><span class="tag">'+escapeHTML(u.role)+'</span><span class="status-dot '+(u.is_active?'on':'off')+'">'+(u.is_active?'نشط':'موقوف')+'</span></div>'+
@@ -1549,7 +1549,7 @@ async function page(p, profileIdentifier = null){
       list.querySelectorAll('[data-notification-id]').forEach(b=>b.onclick=async()=>{await fetch(API+'/api/user-notifications/'+b.dataset.notificationId+'/read',{method:'PATCH',headers:{Authorization:'Bearer '+getToken()}});b.classList.add('read');updateNotificationDot();});
       document.querySelector('#readAllNotifications').onclick=async()=>{await fetch(API+'/api/user-notifications/read-all',{method:'POST',headers:{Authorization:'Bearer '+getToken()}});list.querySelectorAll('.notification-card').forEach(x=>x.classList.add('read'));updateNotificationDot();};
       [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']].forEach(([id,key])=>document.querySelector('#'+id).onchange=async e=>{await fetch(API+'/api/notifications/settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({[key]:e.target.checked})});});
-    }catch(e){document.querySelector('#notificationList').innerHTML='<div class="empty">'+escapeHTML(e.message)+'</div>';}
+    }catch(e){if(document.querySelector('#notificationList')) document.querySelector('#notificationList').innerHTML='<div class="empty">'+escapeHTML(e.message)+'</div>';}
     return;
   }
 
@@ -1660,7 +1660,7 @@ document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChat
       document.querySelector('#chatModalTitle').textContent=type==='group'?'إنشاء مجموعة خاصة':type==='direct'?'محادثة خاصة':'إنشاء قناة عامة';
       document.querySelector('#chatName').placeholder=type==='public'?'مثال: قناة الأنشطة':'اسم المجموعة';document.querySelector('#chatDescriptionWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatHashtagsWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatCoverWrap').style.display=type==='direct'?'none':'flex';
     };
-    async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
+    async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();if(document.querySelector('#chatUsers')) document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
     document.querySelector('#chatCover')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{document.querySelector('#chatCoverPreview').innerHTML='<img class="post-image create-image-preview" src="'+escapeHTML(rd.result)+'">';document.querySelector('#chatCover').dataset.data=rd.result;};rd.readAsDataURL(f);});document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
     document.querySelector('#createChatBtn').onclick=async()=>{
       const type=document.querySelector('#chatType').value;
