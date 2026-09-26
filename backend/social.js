@@ -122,6 +122,25 @@ const moduleExports = function(app, pool, requireAuth) {
     res.status(201).json({ok:true,conversation});
   }));
 
+  app.delete("/api/chat/conversations/:id", requireAuth(async (req,res)=>{
+    const id=Number(req.params.id);
+    if(!Number.isInteger(id)) return res.status(400).json({ok:false,message:"Invalid conversation."});
+    const found=await pool.query("SELECT id,type,is_private,created_by FROM conversations WHERE id=$1",[id]);
+    if(!found.rows.length) return res.status(404).json({ok:false,message:"الدردشة غير موجودة."});
+    const c=found.rows[0];
+    const isOwner=req.user.role==="owner";
+    const isAdmin=req.user.role==="admin";
+    const member=await pool.query("SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND user_id=$2",[id,req.user.id]);
+    const isMember=member.rows.length>0;
+    const allowed=isOwner || (isAdmin && c.type==="public") || (isMember && c.is_private);
+    if(!allowed) return res.status(403).json({ok:false,message:"لا تملك صلاحية حذف هذه الدردشة."});
+    await pool.query("DELETE FROM conversations WHERE id=$1",[id]);
+    await pool.query("INSERT INTO audit_logs(actor_user_id,action,target_type,target_id,details) VALUES($1,$2,$3,$4,$5)",[
+      req.user.id,"chat_deleted","conversation",id,JSON.stringify({type:c.type,is_private:c.is_private,deleted_by_role:req.user.role})
+    ]);
+    res.json({ok:true});
+  }));
+
   app.get("/api/chat/conversations/:id/messages", requireAuth(async (req,res)=>{
     const id=Number(req.params.id);
     if(!Number.isInteger(id)) return res.status(400).json({ok:false,message:"Invalid conversation."});
