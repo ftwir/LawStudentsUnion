@@ -1476,3 +1476,31 @@ main,.feed,.home-shell{scroll-margin-top:110px}
 .creation-hub:not(.open){pointer-events:none !important}
 .chat-modal[hidden]{display:none !important;pointer-events:none !important}
 #shade:not(.open){display:none !important;pointer-events:none !important}
+
+
+/* =========================================================
+   UI INTERACTION + SCROLL PERFORMANCE HARDENING
+========================================================= */
+#shade,#creationHub,#chatModal,#chatManageModal,#drawer{
+  will-change:opacity,transform;
+}
+#shade:not(.open),#creationHub:not(.open),#chatModal[hidden],#chatManageModal:not(.open),#drawer:not(.open){
+  opacity:0 !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+#shade.open,#creationHub.open,#chatModal.open,#chatManageModal.open,#drawer.open{
+  visibility:visible;
+  pointer-events:auto;
+}
+html{overscroll-behavior-y:contain;-webkit-tap-highlight-color:transparent;}
+body{overscroll-behavior-x:none;}
+main,.feed,.chat-list,.chat-messages,.online-hub-list,.community-tabs{
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.feed,.chat-list,.chat-messages,.online-hub-list{contain:layout paint;}
+.post,.card,.poll-card,.chat-item,.bubble{
+  content-visibility:auto;
+  contain-intrinsic-size:1px 120px;
+}
