@@ -1547,6 +1547,7 @@ async function page(p, profileIdentifier = null){
       ]);
       const n=await nr.json(), st=await sr.json();
       const list=document.querySelector('#notificationList');
+      if(currentPageName!=='notifications'||!list) return;
       list.innerHTML=(n.notifications||[]).length?(n.notifications||[]).map(x=>`<button class="notification-card ${x.is_read?'read':''}" data-notification-id="${x.id}"><strong>${escapeHTML(x.title)}</strong><span>${escapeHTML(x.body||'')}</span><small>${escapeHTML(new Date(x.created_at).toLocaleString('ar-LY'))}</small></button>`).join(''):'<div class="empty">لا توجد إشعارات.</div>';
       const settings=st.settings||{}; for(const [id,key] of [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']]) document.querySelector('#'+id).checked=settings[key]!==false;
       list.querySelectorAll('[data-notification-id]').forEach(b=>b.onclick=async()=>{await fetch(API+'/api/user-notifications/'+b.dataset.notificationId+'/read',{method:'PATCH',headers:{Authorization:'Bearer '+getToken()}});b.classList.add('read');updateNotificationDot();});
@@ -1557,6 +1558,7 @@ async function page(p, profileIdentifier = null){
   }
 
 
+  if(p === 'chat'){
     if(!currentUser){ page('login'); return; }
 
     app.innerHTML=`
@@ -1675,7 +1677,7 @@ document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChat
       document.querySelector('#chatName').placeholder=type==='public'?'مثال: قناة الأنشطة':'اسم المجموعة';document.querySelector('#chatDescriptionWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatHashtagsWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatCoverWrap').style.display=type==='direct'?'none':'flex';
     };
     async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();if(document.querySelector('#chatUsers')) document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
-    document.querySelector('#chatCover')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{document.querySelector('#chatCoverPreview').innerHTML='<img class="post-image create-image-preview" src="'+escapeHTML(rd.result)+'">';document.querySelector('#chatCover').dataset.data=rd.result;};rd.readAsDataURL(f);});document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
+    document.querySelector('#chatCover')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{(document.querySelector('#chatCoverPreview')||{}).innerHTML='<img class="post-image create-image-preview" src="'+escapeHTML(rd.result)+'">';document.querySelector('#chatCover').dataset.data=rd.result;};rd.readAsDataURL(f);});document.querySelector('#chatMembersSearch').oninput=e=>searchUsers(e.target.value);searchUsers('');
     document.querySelector('#createChatBtn').onclick=async()=>{
       const type=document.querySelector('#chatType').value;
       const name=document.querySelector('#chatName').value.trim();const description=document.querySelector('#chatDescription')?.value.trim()||'';const hashtags=String(document.querySelector('#chatHashtags')?.value||'').split(/[,\s]+/).filter(Boolean);
@@ -1914,7 +1916,7 @@ async function openChatManagement(chat){
   modal.querySelectorAll('[data-kick]').forEach(b=>b.onclick=async()=>{if(!confirm('طرد هذا العضو من الدردشة؟'))return;const z=await fetch(API+'/api/chat/conversations/'+chat.id+'/members/'+b.dataset.kick,{method:'DELETE',headers:{Authorization:'Bearer '+getToken()}});const j=await z.json();if(!z.ok||!j.ok){alert(j.message||'تعذر الطرد.');return;}close();openChatManagement(chat);});
 }
 function closeCreateChatModal(){const modal=document.querySelector('#chatModal');if(!modal)return;modal.classList.remove('open');setTimeout(()=>{if(modal)modal.hidden=true;},180);}
-async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;const search=document.querySelector('#chatMembersSearch');const name=document.querySelector('#chatName');const desc=document.querySelector('#chatDescription');const tags=document.querySelector('#chatHashtags');if(search)search.value='';if(name)name.value='';if(desc)desc.value='';if(tags)tags.value='';const cover=document.querySelector('#chatCover');if(cover){cover.value='';delete cover.dataset.data;}if(document.querySelector('#chatCoverPreview'))document.querySelector('#chatCoverPreview').innerHTML='';select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
+async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;const search=document.querySelector('#chatMembersSearch');const name=document.querySelector('#chatName');const desc=document.querySelector('#chatDescription');const tags=document.querySelector('#chatHashtags');if(search)search.value='';if(name)name.value='';if(desc)desc.value='';if(tags)tags.value='';const cover=document.querySelector('#chatCover');if(cover){cover.value='';delete cover.dataset.data;}if(document.querySelector('#chatCoverPreview'))(document.querySelector('#chatCoverPreview')||{}).innerHTML='';select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
 function openCreationHub(){
   if(!currentUser){ page('login'); return; }
   const existing=document.querySelector('#creationHub');
