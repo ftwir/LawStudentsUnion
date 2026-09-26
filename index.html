@@ -3,212 +3,89 @@
 
 <head>
   <meta charset="utf-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1"
-  >
-
-  <meta
-    name="theme-color"
-    content="#0d3152"
-  >
-
-  <title>
-    اتحاد طلبة كلية القانون
-  </title>
-
-  <link
-    rel="manifest"
-    href="manifest.json"
-  >
-
-  <link
-    rel="stylesheet"
-    href="style.css"
-  >
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#15151c">
+  <title>اتحاد طلبة كلية القانون</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
 </head>
-
 
 <body>
 
-  <!-- =========================
-       HEADER
-  ========================== -->
+<header class="topbar">
 
-  <header class="top">
+  <button id="menu" class="menu-btn" aria-label="القائمة">
+    ☰
+  </button>
 
-    <button
-      id="menu"
-      class="icon"
-      aria-label="فتح القائمة"
-    >
-      ☰
-    </button>
+  <div class="brand">
+    <div class="brand-icon">⚖</div>
+    <div>
+      <b>اتحاد طلبة كلية القانون</b>
+      <small>Community</small>
+    </div>
+  </div>
 
+  <button class="top-action" data-page="notifications">
+    🔔
+  </button>
+
+</header>
+
+<main id="app"></main>
+
+<nav class="bottom-nav">
+
+  <button data-page="home">
+    <span>⌂</span>
+    الرئيسية
+  </button>
+
+  <button data-page="activities">
+    <span>◈</span>
+    الأنشطة
+  </button>
+
+  <button class="create-btn" data-page="registration">
+    +
+  </button>
+
+  <button data-page="notifications">
+    <span>♡</span>
+    التنبيهات
+  </button>
+
+  <button data-page="schedule">
+    <span>☰</span>
+    الجدول
+  </button>
+
+</nav>
+
+<aside id="drawer">
+
+  <div class="drawer-cover">
+    <div class="drawer-community-icon">⚖</div>
+  </div>
+
+  <div class="drawer-profile">
 
     <div>
-
-      <b>
-        اتحاد طلبة كلية القانون
-      </b>
-
-      <small>
-        المنصة الطلابية
-      </small>
-
+      <strong id="drawerName">زائر</strong>
+      <small id="drawerRole">Guest</small>
     </div>
 
+    <button id="close">×</button>
 
-    <img
-      src="assets/icon.png"
-      alt="شعار اتحاد طلبة كلية القانون"
-      onerror="this.style.display='none'"
-    >
+  </div>
 
-  </header>
+  <div id="drawerContent"></div>
 
+</aside>
 
+<div id="shade"></div>
 
-  <!-- =========================
-       MAIN APPLICATION
-  ========================== -->
-
-  <main id="app"></main>
-
-
-
-  <!-- =========================
-       BOTTOM NAVIGATION
-  ========================== -->
-
-  <nav
-    class="bottom"
-    aria-label="التنقل الرئيسي"
-  >
-
-    <button data-page="home">
-      ⌂
-      <span>الرئيسية</span>
-    </button>
-
-
-    <button data-page="announcements">
-      ▣
-      <span>الإعلانات</span>
-    </button>
-
-
-    <button data-page="activities">
-      ◈
-      <span>الأنشطة</span>
-    </button>
-
-
-    <button data-page="notifications">
-      🔔
-      <span>التنبيهات</span>
-    </button>
-
-
-    <button data-page="schedule">
-      ▤
-      <span>الجدول</span>
-    </button>
-
-
-    <button data-page="registration">
-      ✎
-      <span>التسجيل</span>
-    </button>
-
-  </nav>
-
-
-
-  <!-- =========================
-       SIDE DRAWER
-  ========================== -->
-
-  <aside
-    id="drawer"
-    aria-label="القائمة الجانبية"
-  >
-
-    <div class="drawer-head">
-
-      <b>
-        اتحاد طلبة كلية القانون
-      </b>
-
-
-      <button
-        id="close"
-        aria-label="إغلاق القائمة"
-      >
-        ×
-      </button>
-
-    </div>
-
-
-    <button data-page="home">
-      الرئيسية
-    </button>
-
-
-    <button data-page="login">
-      تسجيل الدخول
-    </button>
-
-
-    <button data-page="announcements">
-      الإعلانات
-    </button>
-
-
-    <button data-page="activities">
-      الأنشطة
-    </button>
-
-
-    <button data-page="notifications">
-      الإشعارات
-    </button>
-
-
-    <button data-page="schedule">
-      الجدول الدراسي
-    </button>
-
-
-    <button data-page="registration">
-      تسجيل الطالب
-    </button>
-
-
-    <button data-page="about">
-      عن الاتحاد
-    </button>
-
-  </aside>
-
-
-
-  <!-- =========================
-       DRAWER OVERLAY
-  ========================== -->
-
-  <div id="shade"></div>
-
-
-
-  <!-- =========================
-       APPLICATION JAVASCRIPT
-  ========================== -->
-
-  <script src="app.js"></script>
+<script src="app.js"></script>
 
 </body>
-
-                     </html>
+</html>
