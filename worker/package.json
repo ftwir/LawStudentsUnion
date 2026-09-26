@@ -1,5 +1,13 @@
 {
-  "name":"law-students-union-self-healing-agent","version":"1.0.0","private":true,"type":"module",
-  "scripts":{"start":"node selfHealingService.js"},
-  "dependencies":{"@google/genai":"^1.16.0","@octokit/rest":"^22.0.0","express":"^4.21.2"}
+  "name": "law-students-union-self-healing-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node selfHealingService.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.16.0",
+    "@octokit/rest": "^22.0.0",
+    "express": "^4.21.2"
+  }
 }
