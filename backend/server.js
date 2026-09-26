@@ -534,24 +534,29 @@ function requireRoles(...roles) {
 function cleanProfileUser(user, viewer = null) {
     const privacy = user.privacy_settings || {};
     const isSelf = viewer && Number(viewer.id) === Number(user.id);
-    const showEmail = isSelf || privacy.show_email === true;
-    const showPhone = isSelf || privacy.show_phone === true;
-    const showOnline = isSelf || privacy.show_online !== false;
+
+    // The Owner is a server-level identity. For everyone except the Owner,
+    // the public application treats that account as an ordinary member.
+    const isHiddenOwner = user.role === "owner" && !isSelf;
+
+    const showEmail = !isHiddenOwner && (isSelf || privacy.show_email === true);
+    const showPhone = !isHiddenOwner && (isSelf || privacy.show_phone === true);
+    const showOnline = !isHiddenOwner && (isSelf || privacy.show_online !== false);
     const online = !!user.last_seen_at &&
         (Date.now() - new Date(user.last_seen_at).getTime()) <= 90000;
 
     return {
         id: user.id,
-        full_name: user.full_name,
-        student_id: user.student_id,
+        full_name: isHiddenOwner ? "عضو الاتحاد" : user.full_name,
+        student_id: isHiddenOwner ? null : user.student_id,
         email: showEmail ? user.email : null,
         phone: showPhone ? user.phone : null,
         academic_year: user.academic_year,
-        bio: user.bio,
+        bio: isHiddenOwner ? null : user.bio,
         avatar_url: user.avatar_url,
         profile_background_url: user.profile_background_url,
         profile_slug: user.profile_slug || `u-${user.id}`,
-        role: user.role,
+        role: isHiddenOwner ? "member" : user.role,
         is_active: user.is_active,
         online: showOnline ? online : false,
         show_online: showOnline,
@@ -765,6 +770,7 @@ app.get("/api/admin/users", requireRoles("admin", "owner"), async (req, res) => 
             `SELECT id, full_name, student_id, email, academic_year, role,
                     is_active, last_seen_at, created_at
              FROM users
+             WHERE role <> 'owner'
              ORDER BY created_at DESC`
         );
 
