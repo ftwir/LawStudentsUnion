@@ -256,6 +256,7 @@ app.post("/api/auth/login", async (req, res) => {
              FROM users
              WHERE student_id = $1
                 OR email = $1
+                OR phone = $1
              LIMIT 1`,
             [identifier]
         );
@@ -1075,9 +1076,87 @@ async function initializeDatabase() {
     }
 }
 
+
+async function ensureOwnerAccount() {
+    const ownerLogin = process.env.OWNER_LOGIN;
+    const ownerPassword = process.env.OWNER_PASSWORD;
+
+    if (!ownerLogin || !ownerPassword) {
+        console.warn("OWNER_LOGIN/OWNER_PASSWORD are not configured; owner bootstrap skipped.");
+        return;
+    }
+
+    if (ownerPassword.length < 8) {
+        throw new Error("OWNER_PASSWORD must contain at least 8 characters.");
+    }
+
+    const existingOwner = await pool.query(
+        `SELECT id, role
+         FROM users
+         WHERE role = 'owner'
+         LIMIT 1`
+    );
+
+    const passwordHash = await hashPassword(ownerPassword);
+
+    if (existingOwner.rows.length > 0) {
+        const ownerId = existingOwner.rows[0].id;
+
+        await pool.query(
+            `UPDATE users
+             SET phone = $1,
+                 password_hash = $2,
+                 is_active = TRUE,
+                 profile_slug = COALESCE(profile_slug, 'u-' || id)
+             WHERE id = $3`,
+            [ownerLogin, passwordHash, ownerId]
+        );
+
+        console.log("Owner account credentials synchronized.");
+        return;
+    }
+
+    const duplicateLogin = await pool.query(
+        `SELECT id
+         FROM users
+         WHERE student_id = $1 OR email = $1 OR phone = $1
+         LIMIT 1`,
+        [ownerLogin]
+    );
+
+    if (duplicateLogin.rows.length > 0) {
+        throw new Error("OWNER_LOGIN is already used by another account; owner bootstrap stopped.");
+    }
+
+    const result = await pool.query(
+        `INSERT INTO users
+            (full_name, student_id, phone, password_hash, role, is_active, last_seen_at)
+         VALUES
+            ('مالك النظام', 'OWNER-' || upper($1), $1, $2, 'owner', TRUE, NULL)
+         RETURNING id`,
+        [ownerLogin, passwordHash]
+    );
+
+    await pool.query(
+        `UPDATE users
+         SET profile_slug = 'u-' || id
+         WHERE id = $1`,
+        [result.rows[0].id]
+    );
+
+    await pool.query(
+        `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details)
+         VALUES ($1, 'owner.bootstrap', 'user', $1, $2::jsonb)`,
+        [result.rows[0].id, JSON.stringify({ source: "environment_configuration" })]
+    );
+
+    console.log("Owner account created successfully.");
+}
+
 async function startServer() {
 
     await initializeDatabase();
+    await ensureOwnerAccount();
 
     app.listen(
         PORT,
