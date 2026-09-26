@@ -42,6 +42,7 @@ SET profile_slug = 'u-' || id
 WHERE profile_slug IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_profile_slug ON users(profile_slug) WHERE profile_slug IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_one_owner_only ON users(role) WHERE role = 'owner';
 
 CREATE TABLE IF NOT EXISTS sessions (
