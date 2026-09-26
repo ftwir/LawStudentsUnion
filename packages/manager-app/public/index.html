@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>اختبار لوحة المفاتيح</title>
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>اختبار لوحة المفاتيح — V3</title>
 <style>
 body{font-family:system-ui,sans-serif;padding:20px;line-height:1.6}
 input,textarea,[contenteditable]{display:block;width:100%;box-sizing:border-box;padding:16px;font-size:22px;margin:8px 0 20px;border:2px solid #777;border-radius:8px;background:#fff;color:#000}
@@ -12,14 +15,14 @@ textarea{min-height:120px}
 </style>
 </head>
 <body>
-<h2>اختبار استقبال الكتابة</h2>
-<p>جرّب كل خانة. لا يوجد تسجيل دخول أو API أو طبقات فوق الصفحة.</p>
+<h2>اختبار استقبال الكتابة — V3</h2>
+<p>هذه نسخة جديدة. جرّب كل خانة: Input ثم Textarea ثم Contenteditable.</p>
 <label>Input</label><input id="i" type="text" inputmode="text" autocomplete="off">
 <label>Textarea</label><textarea id="t" inputmode="text"></textarea>
 <label>Contenteditable</label><div id="c" contenteditable="true" role="textbox"></div>
-<div id="log">جاهز</div>
+<div id="log">جاهز — V3</div>
 <script>
-const logEl=document.getElementById('log'), events=[];
+const logEl=document.getElementById('log'),events=[];
 function log(x){events.unshift(new Date().toLocaleTimeString()+': '+x);logEl.textContent=events.slice(0,20).join('\n')}
 for(const el of [document.getElementById('i'),document.getElementById('t'),document.getElementById('c')]){
  ['focus','blur','keydown','beforeinput','input','keyup','compositionstart','compositionupdate','compositionend','paste'].forEach(type=>{
@@ -27,7 +30,7 @@ for(const el of [document.getElementById('i'),document.getElementById('t'),docum
  });
 }
 window.addEventListener('error',e=>log('ERROR '+e.message));
-log('ready');
+log('ready V3 — '+location.href);
 </script>
 </body>
 </html>
