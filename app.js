@@ -6,6 +6,7 @@ let currentUser = null;
 let currentPageName='home';
 let chatPollTimer=null;
 let onlineHubTimer=null;
+let pendingChatId=null;
 
 /* =========================
    AUTH
@@ -822,7 +823,7 @@ async function renderManagementPage(target){
         (channels.length?channels.map(c=>'<button class="admin-user-row private-channel-row" data-private-chat="'+c.id+'"><div><strong>'+escapeHTML(c.name||'محادثة خاصة')+'</strong><small>'+escapeHTML(c.type==='group'?'مجموعة خاصة':'محادثة خاصة')+' · '+(c.member_count||0)+' أعضاء</small></div><span class="tag">خاصة</span></button>').join(''):'<div class="empty">لا توجد قنوات خاصة بعد.</div>')+
         '</div>';
       document.querySelector('#ownerCreatePrivateChat')?.addEventListener('click',async()=>{await page('chat');requestAnimationFrame(()=>openCreateChatModal('group'));});
-      document.querySelectorAll('[data-private-chat]').forEach(b=>b.onclick=async()=>{await page('chat');});
+      document.querySelectorAll('[data-private-chat]').forEach(b=>b.onclick=async()=>{pendingChatId=Number(b.dataset.privateChat);await page('chat');});
       return;
     }
 
@@ -1542,7 +1543,20 @@ async function page(p, profileIdentifier = null){
       const rr=await fetch(API+'/api/chat/conversations',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
       if(!rr.ok||!xx.ok)throw new Error(xx.message||'تعذر تحميل الدردشات.');
       conversations=xx.conversations||[];
-      list.innerHTML=conversations.length?conversations.map(c=>`<button class="chat-row" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>`).join(''):'<div class="empty">لا توجد محادثات بعد.</div>';
+      renderChatList();
+      if(pendingChatId){
+        const target=pendingChatId;
+        pendingChatId=null;
+        await openChat(target);
+      }
+    }
+    function renderChatList(filter=''){
+      const q=String(filter||'').trim().toLowerCase();
+      const visible=conversations.filter(c=>{
+        const title=c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة';
+        return !q || title.toLowerCase().includes(q) || String(c.last_message||'').toLowerCase().includes(q);
+      });
+      list.innerHTML=visible.length?visible.map(c=>`<button class="chat-row ${active&&Number(active.id)===Number(c.id)?'active':''}" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button>`).join(''):'<div class="empty">لا توجد محادثات مطابقة.</div>';
       list.querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.cid)));
     }
     async function openChat(id,preserveScroll=false){
@@ -1551,13 +1565,16 @@ async function page(p, profileIdentifier = null){
       document.querySelector('#chatTitle').textContent=active.name||active.members.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ');
       document.querySelector('#chatSubtitle').textContent=active.type==='public'?'قناة عامة':active.members.length+' أعضاء';
       const rr=await fetch(API+'/api/chat/conversations/'+id+'/messages',{headers:{Authorization:'Bearer '+getToken()},cache:'no-store'}),xx=await rr.json();
+      const wasNearBottom=messages.scrollHeight-messages.scrollTop-messages.clientHeight<100;
       messages.innerHTML=(xx.messages||[]).map(m=>`<div class="bubble ${Number(m.sender.id)===Number(currentUser.id)?'mine':''}"><small>${escapeHTML(m.sender.full_name)}</small><div>${escapeHTML(m.body)}</div><time>${new Date(m.created_at).toLocaleTimeString('ar-LY',{hour:'2-digit',minute:'2-digit'})}</time></div>`).join('')||'<div class="empty">ابدأ أول رسالة.</div>';
-      messages.scrollTop=messages.scrollHeight;
+      if(!preserveScroll || wasNearBottom) messages.scrollTop=messages.scrollHeight;
+      renderChatList(document.querySelector('#chatSearch')?.value||'');
     }
+    document.querySelector('#chatSearch').oninput=e=>renderChatList(e.target.value);
     document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();if(!active)return;const input=e.currentTarget.elements.body;if(!input.value.trim())return;const rr=await fetch(API+'/api/chat/conversations/'+active.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({body:input.value.trim()})}),xx=await rr.json();if(!rr.ok||!xx.ok){alert(xx.message||'تعذر إرسال الرسالة.');return;}input.value='';await openChat(active.id);await loadConversations();};
     document.querySelector('#closeChatModal').onclick=closeCreateChatModal;
 document.querySelector('#chatModal').onclick=e=>{if(e.target.id==='chatModal')closeCreateChatModal();};
-document.querySelector('#chatNewButton').onclick=()=>openCreateChatModal('direct');
+document.querySelector('#chatNewButton').onclick=()=>{selected=[];openCreateChatModal('direct');};
      document.querySelector('#chatType').onchange=e=>{
       const type=e.target.value;
       document.querySelector('#chatNameWrap').style.display=type==='direct'?'none':'block';
@@ -1752,7 +1769,7 @@ async function renderProfileEditor(user){
 
 
 function closeCreateChatModal(){const modal=document.querySelector('#chatModal');if(!modal)return;modal.classList.remove('open');setTimeout(()=>{if(modal)modal.hidden=true;},180);}
-async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
+async function openCreateChatModal(type='direct'){if(!currentUser){page('login');return;}if(!document.querySelector('#chatModal'))await page('chat');const modal=document.querySelector('#chatModal'),select=document.querySelector('#chatType');if(!modal||!select)return;const search=document.querySelector('#chatMembersSearch');const name=document.querySelector('#chatName');if(search)search.value='';if(name)name.value='';select.value=type;select.dispatchEvent(new Event('change'));modal.hidden=false;requestAnimationFrame(()=>modal.classList.add('open'));}
 function openCreationHub(){
   if(!currentUser){ page('login'); return; }
   const existing=document.querySelector('#creationHub');
