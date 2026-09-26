@@ -528,6 +528,21 @@ function bindPostEvents(container,section){
   container.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>openProfile(b.dataset.profile));
   container.querySelectorAll('.post').forEach(post=>{
     const id=post.dataset.postId;
+    post.querySelector('[data-action="report"]')?.addEventListener('click',async()=>{
+      if(!getToken()){alert('سجّل الدخول أولاً لإرسال بلاغ.');return;}
+      const reason=prompt('اذكر سبب البلاغ:');
+      if(!reason?.trim())return;
+      try{
+        const response=await fetch(API+'/api/posts/'+post.dataset.postId+'/report',{
+          method:'POST',
+          headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},
+          body:JSON.stringify({reason:reason.trim()})
+        });
+        const result=await response.json();
+        if(!response.ok||!result.ok)throw new Error(result.message||'تعذر إرسال البلاغ.');
+        alert('تم إرسال البلاغ إلى الإدارة.');
+      }catch(e){alert(e.message);}
+    });
     post.querySelector('[data-action="like"]')?.addEventListener('click',async()=>{
       if(!currentUser){page('login');return;}
       const r=await fetch(API+'/api/posts/'+id+'/like',{method:'POST',headers:{Authorization:'Bearer '+getToken()}});
