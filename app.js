@@ -1632,24 +1632,36 @@ document
   setInterval(heartbeat, 30000);
 
   const hash = location.hash.replace(/^#/, '');
-  if(hash.startsWith('profile/')){
-    const identifier = decodeURIComponent(hash.slice('profile/'.length));
-    page('profile', identifier);
-  }else{
+  async function handleHash(){
+    const hash = location.hash.replace(/^#/, '');
+    if(hash.startsWith('profile/')){
+      const identifier = decodeURIComponent(hash.slice('profile/'.length));
+      await page('profile', identifier);
+      return;
+    }
+    if(hash.startsWith('post/')){
+      const postId = decodeURIComponent(hash.slice('post/'.length));
+      await page('posts');
+      requestAnimationFrame(() => {
+        const target = document.querySelector('.post[data-post-id="'+CSS.escape(postId)+'"]');
+        if(target){
+          target.scrollIntoView({behavior:'smooth',block:'center'});
+          target.classList.add('hash-target');
+          setTimeout(()=>target.classList.remove('hash-target'),1800);
+        }
+      });
+      return;
+    }
     /*
       التطبيق يبدأ دائماً كـGuest
       إذا لم توجد جلسة صالحة.
     */
-    page('home');
+    await page('home');
   }
 
-  window.addEventListener('hashchange', () => {
-    const next = location.hash.replace(/^#/, '');
-    if(next.startsWith('profile/')){
-      const identifier = decodeURIComponent(next.slice('profile/'.length));
-      page('profile', identifier);
-    }
-  });
+  await handleHash();
+
+  window.addEventListener('hashchange', handleHash);
 
 })();
 
