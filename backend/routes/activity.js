@@ -1,7 +1,7 @@
 module.exports = function registerActivityRoutes(app, pool, requireAuth, requireRoles) {
   const allowedPages = new Set([
     "home","announcements","activities","schedule","notifications","login","registration",
-    "profile","posts","create","chat","online-hub","admin","members","applications",
+    "profile","posts","create","chat","online-hub","assistant","admin","members","applications",
     "content","reports","owner","admins","users","private-chats","logs","settings","about"
   ]);
 
