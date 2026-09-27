@@ -1,7 +1,8 @@
 const express=require('express');
 const {query,transaction}=require('../db');
 const router=express.Router();
-function attach(requireAuth){
+function attach(requireAuth,requireManager){
+ const owner=requireManager;
  const staff=roles=>requireAuth(async(req,res,next)=>{if(!roles.includes(req.user.role))return res.status(403).json({ok:false,message:'صلاحية الإدارة مطلوبة.'});next();});
  router.get('/admin/dashboard',staff(['admin','owner']),async(req,res,next)=>{try{const names=['users','posts','conversations','reports','registrations'];const out={};for(const n of names){const r=await query('SELECT COUNT(*)::int count FROM '+n);out[n]=r.rows[0].count}res.json({ok:true,stats:out})}catch(e){next(e)}});
  router.get('/admin/users',staff(['admin','owner']),async(req,res,next)=>{try{const r=await query('SELECT id,full_name,student_id,role,is_active,last_seen_at,created_at FROM users ORDER BY created_at DESC LIMIT 300');res.json({ok:true,items:r.rows})}catch(e){next(e)}});
