@@ -600,74 +600,74 @@ function renderAdmin(){
   const target=pageName;
   const ownerOnly=["owner","admins","users","private-chats","logs"];
   if(!isManager() || (ownerOnly.includes(target)&&role()!=="owner")){go("/");return;}
-
   root.innerHTML='<div class="loading">جارٍ تحميل بيانات الإدارة...</div>';
 
   const load=async()=>{
     if(target==="admin"){
-      const [status,assistant,activityData]=await Promise.all([
-        api("/api/owner/status"),
-        api("/api/assistant/status"),
-        api("/api/activity/users")
+      const [users,assistant]=await Promise.all([
+        api(role()==="owner"?"/api/owner/users":"/api/admin/users"),
+        api("/api/assistant/status")
       ]);
+      const rows=users.users||[];
+      const active=rows.filter(user=>user.is_active).length;
       root.innerHTML=sectionHeader("لوحة الإدارة","حالة النظام والنشاط الفعلي")+
-        '<div class="stats-grid">'+
-        '<div class="stat card"><b>'+esc(status.metrics?.users||0)+'</b><span>مستخدم</span></div>'+
-        '<div class="stat card"><b>'+esc(status.metrics?.activeSessions||0)+'</b><span>جلسات نشطة</span></div>'+
-        '<div class="stat card"><b>'+esc(assistant.pending_registrations||0)+'</b><span>طلبات معلقة</span></div>'+
-        '<div class="stat card"><b>'+esc(assistant.active_members||0)+'</b><span>نشطون الآن</span></div></div>'+
-        '<article class="card content-card"><h2>LSU Guardian</h2><p>النظام الذكي يعمل بوضع التحقق والقواعد وقاعدة البيانات.</p></article>'+
-        '<article class="card content-card"><h2>آخر نشاط</h2><div class="stack">'+(activityData.users||[]).slice(0,12).map(u=>'<div class="admin-row"><strong>'+esc(u.full_name)+'</strong><span>'+esc(u.current_page||"")+'</span><small>'+esc(new Date(u.last_activity_at).toLocaleString("ar-LY"))+'</small></div>').join("")+'</div></article>';
+        '<div class="stats-grid"><div class="stat card"><b>'+esc(rows.length)+'</b><span>مستخدم</span></div><div class="stat card"><b>'+esc(active)+'</b><span>حسابات نشطة</span></div><div class="stat card"><b>'+esc(assistant.pending_registrations||0)+'</b><span>طلبات معلقة</span></div><div class="stat card"><b>'+esc(assistant.active_members||0)+'</b><span>نشطون الآن</span></div></div>'+
+        '<article class="card content-card"><h2>LSU Guardian</h2><p>الحالة: '+esc(assistant.bot?.state||"جاهز")+' · '+esc(assistant.bot?.mode||"rules-and-database")+'</p></article>';
       return;
     }
 
     if(target==="logs"){
       const data=await api("/api/owner/audit");
+      const events=data.events||[];
       root.innerHTML=sectionHeader("سجل النظام","آخر العمليات المسجلة")+
-        ((data.events||[]).map(x=>'<article class="card admin-row"><b>'+esc(x.action)+'</b><span>'+esc(x.target_type||"")+'</span><small>'+esc(new Date(x.created_at).toLocaleString("ar-LY"))+'</small></article>').join("")||empty("لا توجد سجلات."));
+        ((events.map(x=>'<article class="card admin-row"><b>'+esc(x.action)+'</b><span>'+esc(x.actor_name||"النظام")+' · '+esc(x.target_type||"")+'</span><small>'+esc(new Date(x.created_at).toLocaleString("ar-LY"))+'</small></article>').join(""))||empty("لا توجد سجلات."));
       return;
     }
 
     if(target==="private-chats"){
       const data=await api("/api/chat/private-channels");
       root.innerHTML=sectionHeader("القنوات الخاصة","المحادثات الخاصة المسجلة في النظام")+
-        '<div class="stack">'+((data.conversations||[]).map(c=>'<article class="card admin-row"><div><strong>'+esc(c.name||"دردشة خاصة")+'</strong><small>النوع: '+esc(c.type)+' · الأعضاء: '+esc(c.member_count||0)+'</small></div><a class="btn secondary" href="/chat/?id='+encodeURIComponent(c.id)+'">فتح</a></article>').join("")||empty("لا توجد قنوات خاصة."))+'</div>';
+        '<div class="stack">'+((data.conversations||[]).map(chat=>'<article class="card admin-row"><div><strong>'+esc(chat.name||"دردشة خاصة")+'</strong><small>النوع: '+esc(chat.type)+' · الأعضاء: '+esc(chat.member_count||0)+'</small></div><a class="btn secondary" href="/chat/?id='+encodeURIComponent(chat.id)+'">فتح</a></article>').join("")||empty("لا توجد قنوات خاصة."))+'</div>';
       return;
     }
 
-    const data=await api("/api/owner/users");
+    const endpoint=role()==="owner"?"/api/owner/users":"/api/admin/users";
+    const data=await api(endpoint);
     let rows=data.users||[];
-    const onlyAdmins=target==="admins";
-    if(onlyAdmins)rows=rows.filter(user=>user.role==="admin");
+    if(target==="admins")rows=rows.filter(user=>user.role==="admin");
     root.innerHTML=sectionHeader(target==="members"?"الأعضاء":target==="admins"?"إدارة Admins":"المستخدمون","بيانات حقيقية من قاعدة البيانات")+
-      '<div class="card" style="padding:15px"><input id="adminSearch" placeholder="بحث بالاسم أو رقم القيد"><div id="adminRows" class="stack" style="margin-top:12px"></div></div>';
+      '<div class="card"><input id="adminSearch" placeholder="بحث بالاسم أو الرقم"><div id="adminRows" class="stack" style="margin-top:12px"></div></div>';
     const list=document.querySelector("#adminRows");
-    const renderRows=()=>{
+    const draw=()=>{
       const q=(document.querySelector("#adminSearch")?.value||"").trim().toLowerCase();
       const filtered=rows.filter(user=>!q||[user.full_name,user.student_id,user.email,user.phone].some(value=>String(value||"").toLowerCase().includes(q)));
       list.innerHTML=filtered.length?filtered.map(user=>{
-        const roleControl=role()==="owner"&&Number(user.id)!==Number(state.user.id)?'<select data-role-change="'+user.id+'"><option value="member" '+(user.role==="member"?"selected":"")+'>عضو</option><option value="admin" '+(user.role==="admin"?"selected":"")+'>Admin</option></select>':"";
-        return '<article class="admin-row"><div><strong>'+esc(user.full_name)+'</strong><small>'+esc(user.student_id||"")+' · '+esc(user.email||"")+'</small></div><span class="tag">'+esc(user.role)+'</span><span>'+esc(user.is_active?"نشط":"موقوف")+'</span>'+roleControl+'<button type="button" class="btn secondary" data-user-status="'+user.id+'">'+(user.is_active?"تعطيل":"تفعيل")+'</button></article>';
+        const roleControl=role()==="owner"&&Number(user.id)!==Number(state.user.id)
+          ?'<select data-role-change="'+user.id+'"><option value="member" '+(user.role==="member"?"selected":"")+'>عضو</option><option value="admin" '+(user.role==="admin"?"selected":"")+'>Admin</option></select>'
+          :"";
+        const statusAction='<button type="button" class="btn secondary" data-user-status="'+user.id+'">'+(user.is_active?"تعطيل":"تفعيل")+'</button>';
+        return '<article class="admin-row"><div><strong>'+esc(user.full_name)+'</strong><small>'+esc(user.student_id||"")+' · '+esc(user.email||"")+'</small></div><span class="tag">'+esc(user.role)+'</span><span>'+esc(user.is_active?"نشط":"موقوف")+'</span>'+roleControl+statusAction+'</article>';
       }).join(""):empty("لا توجد نتائج.");
+
       list.querySelectorAll("[data-user-status]").forEach(button=>button.onclick=async()=>{
         try{
-          const user=rows.find(x=>String(x.id)===String(button.dataset.userStatus));
+          const user=rows.find(item=>String(item.id)===String(button.dataset.userStatus));
           await api("/api/admin/users/"+button.dataset.userStatus+"/status",{method:"PATCH",body:JSON.stringify({is_active:!user?.is_active})});
           await renderAdmin();
         }catch(error){notify(error.message,"error");}
       });
       list.querySelectorAll("[data-role-change]").forEach(select=>select.onchange=async()=>{
-        try{await api("/api/owner/users/"+select.dataset.roleChange+"/role",{method:"PATCH",body:JSON.stringify({role:select.value})});await renderAdmin();}
-        catch(error){notify(error.message,"error");}
+        try{
+          await api("/api/owner/users/"+select.dataset.roleChange+"/role",{method:"PATCH",body:JSON.stringify({role:select.value})});
+          await renderAdmin();
+        }catch(error){notify(error.message,"error");}
       });
     };
-    document.querySelector("#adminSearch")?.addEventListener("input",renderRows);
-    renderRows();
+    document.querySelector("#adminSearch")?.addEventListener("input",draw);
+    draw();
   };
 
-  load().catch(error=>{
-    root.innerHTML='<div class="empty error-box"><strong>تعذر فتح لوحة الإدارة</strong><span>'+esc(error.message)+'</span></div>';
-  });
+  load().catch(error=>root.innerHTML='<div class="empty error-box"><strong>تعذر فتح لوحة الإدارة</strong><span>'+esc(error.message)+'</span></div>');
 }
 
 async function renderApplications(){
