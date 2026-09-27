@@ -324,28 +324,74 @@ function fileToDataURL(file,maxBytes){
 
 async function renderCreate(){
   if(!state.user){go("/login/");return;}
-  const root=document.querySelector("#createRoot"); if(!root)return;
-  const tabs=root.querySelectorAll("[data-create-type]"),box=root.querySelector("#createFormBox");
-  const renderType=type=>{
-    tabs.forEach(x=>x.classList.toggle("active",x.dataset.createType===type));
+  const root=document.querySelector("#createRoot");
+  if(!root)return;
+
+  const tabs=root.querySelectorAll("[data-create-type]");
+  const box=root.querySelector("#createFormBox");
+
+  const renderType=async type=>{
+    tabs.forEach(button=>button.classList.toggle("active",button.dataset.createType===type));
+
     if(type==="poll"){
-      if(type==="chat"){
-      box.innerHTML='<form class="form" id="chatCreateForm"><label>نوع الدردشة<select name="type"><option value="direct">دردشة خاصة</option><option value="group">مجموعة</option></select></label><label>اسم الدردشة<input name="name" maxlength="150" placeholder="اسم المجموعة"></label><label>الوصف<textarea name="description" maxlength="1000"></textarea></label><label>البحث عن أعضاء<input id="chatMemberSearch" autocomplete="off" placeholder="ابحث بالاسم أو رقم القيد"></label><div id="chatMemberList" class="stack"><div class="loading">جارٍ تحميل الأعضاء...</div></div><div id="selectedMembers" class="muted"></div><button class="btn" type="submit">إنشاء الدردشة</button><div class="form-status"></div></form>';
+      box.innerHTML='<form class="form" id="pollForm"><label>السؤال<textarea name="question" rows="4" required></textarea></label><div id="pollOptions" class="stack"><input name="option" required placeholder="الخيار 1"><input name="option" required placeholder="الخيار 2"></div><button type="button" class="btn secondary" id="addOption">+ إضافة خيار</button><label>الهاشتاقات<input name="hashtags" placeholder="#قانون #دراسة"></label><button class="btn" type="submit">نشر الاستفتاء</button><div class="form-status"></div></form>';
+      const form=document.querySelector("#pollForm");
+      form.querySelector("#addOption").onclick=()=>{
+        const wrap=form.querySelector("#pollOptions");
+        if(wrap.children.length>=8)return;
+        const input=document.createElement("input");
+        input.name="option";input.placeholder="خيار جديد";input.required=true;
+        wrap.appendChild(input);
+      };
+      form.onsubmit=async event=>{
+        event.preventDefault();
+        const button=form.querySelector("button[type=submit]");
+        const status=form.querySelector(".form-status");
+        const data=new FormData(form);
+        const options=data.getAll("option").map(value=>String(value).trim()).filter(Boolean);
+        if(options.length<2){status.textContent="أضف خيارين على الأقل.";return;}
+        button.disabled=true;status.textContent="جارٍ النشر...";
+        try{
+          await api("/api/polls",{method:"POST",body:JSON.stringify({
+            question:String(data.get("question")||"").trim(),
+            options,
+            hashtags:String(data.get("hashtags")||"").split(/[,\s]+/).filter(Boolean),
+            duration_minutes:1440,
+            allow_vote_change:true,
+            anonymous:false,
+            results_visibility:"after_vote"
+          })});
+          notify("تم نشر الاستفتاء.","success");
+          go("/");
+        }catch(error){status.textContent=error.message;button.disabled=false;}
+      };
+      return;
+    }
+
+    if(type==="chat"){
+      box.innerHTML='<form class="form" id="chatCreateForm"><label>نوع الدردشة<select name="type"><option value="direct">دردشة خاصة</option><option value="group">مجموعة</option></select></label><label>اسم الدردشة<input name="name" maxlength="150" placeholder="اسم المجموعة"></label><label>الوصف<textarea name="description" maxlength="1000"></textarea></label><label>البحث عن أعضاء<input id="chatMemberSearch" autocomplete="off" placeholder="ابحث بالاسم أو رقم القيد"></label><div id="chatMemberList" class="stack"></div><div id="selectedMembers" class="muted">لم يتم اختيار أعضاء.</div><button class="btn" type="submit">إنشاء الدردشة</button><div class="form-status"></div></form>';
       const form=document.querySelector("#chatCreateForm");
       const search=document.querySelector("#chatMemberSearch");
       const list=document.querySelector("#chatMemberList");
       const selectedEl=document.querySelector("#selectedMembers");
       const selected=new Map();
+
       const loadMembers=async()=>{
         try{
+          list.innerHTML='<div class="loading">جارٍ تحميل الأعضاء...</div>';
           const data=await api("/api/chat/users?q="+encodeURIComponent(search.value.trim()));
-          list.innerHTML=(data.users||[]).map(u=>'<label class="card" style="display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer"><input type="checkbox" data-chat-user="'+u.id+'"><span class="avatar">'+(u.avatar_url?'<img src="'+esc(u.avatar_url)+'" alt="">':"👤")+'</span><span><strong>'+esc(u.full_name)+'</strong><small style="display:block;color:var(--muted)">'+esc(u.student_id||"")+'</small></span></label>').join("")||empty("لا يوجد أعضاء مطابقون.");
+          list.innerHTML=(data.users||[]).map(user=>
+            '<label class="card" style="display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer">'+
+            '<input type="checkbox" data-chat-user="'+user.id+'">'+
+            '<span class="avatar">'+(user.avatar_url?'<img src="'+esc(user.avatar_url)+'" alt="">':"👤")+'</span>'+
+            '<span><strong>'+esc(user.full_name)+'</strong><small style="display:block;color:var(--muted)">'+esc(user.student_id||"")+'</small></span></label>'
+          ).join("")||empty("لا توجد نتائج.");
           list.querySelectorAll("[data-chat-user]").forEach(input=>{
-            input.checked=selected.has(Number(input.dataset.chatUser));
+            const id=Number(input.dataset.chatUser);
+            input.checked=selected.has(id);
             input.onchange=()=>{
-              const id=Number(input.dataset.chatUser);
-              const row=input.closest("label");
-              const name=row?.querySelector("strong")?.textContent||"عضو";
+              const label=input.closest("label");
+              const name=label?.querySelector("strong")?.textContent||"عضو";
               if(form.type.value==="direct"&&input.checked){
                 list.querySelectorAll("[data-chat-user]").forEach(other=>{
                   if(other!==input){other.checked=false;selected.delete(Number(other.dataset.chatUser));}
@@ -355,38 +401,62 @@ async function renderCreate(){
               selectedEl.textContent=selected.size?"الأعضاء المحددون: "+Array.from(selected.values()).join("، "):"لم يتم اختيار أعضاء.";
             };
           });
-        }catch(error){list.innerHTML='<div class="empty error-box">'+esc(error.message)+'</div>';}
+        }catch(error){list.innerHTML='<div class="empty error-box"><strong>تعذر تحميل الأعضاء</strong><span>'+esc(error.message)+'</span></div>';}
       };
-      search.addEventListener("input",debounce(loadMembers,250));
-      form.type.addEventListener("change",loadMembers);
-      form.onsubmit=async e=>{
-        e.preventDefault();
-        const btn=form.querySelector("button[type=submit]");
+
+      search.oninput=debounce(loadMembers,250);
+      form.type.onchange=async()=>{if(form.type.value==="direct"){form.name.value="";}await loadMembers();};
+      form.onsubmit=async event=>{
+        event.preventDefault();
+        const button=form.querySelector("button[type=submit]");
         const status=form.querySelector(".form-status");
         const memberIds=Array.from(selected.keys());
-        if((form.type.value==="direct"&&memberIds.length!==1)||(form.type.value==="group"&&memberIds.length<1)){status.textContent="اختر الأعضاء أولاً.";return;}
-        btn.disabled=true;
+        if(form.type.value==="direct"&&memberIds.length!==1){status.textContent="اختر عضواً واحداً للدردشة الخاصة.";return;}
+        if(form.type.value==="group"&&memberIds.length<1){status.textContent="اختر عضواً واحداً على الأقل.";return;}
+        if(form.type.value==="group"&&!form.name.value.trim()){status.textContent="اسم المجموعة مطلوب.";return;}
+        button.disabled=true;status.textContent="جارٍ إنشاء الدردشة...";
         try{
-          const data=await api("/api/chat/conversations",{method:"POST",body:JSON.stringify({type:form.type.value,name:form.name.value.trim(),description:form.description.value.trim(),member_ids:memberIds})});
+          const data=await api("/api/chat/conversations",{method:"POST",body:JSON.stringify({
+            type:form.type.value,
+            name:form.type.value==="direct"?null:form.name.value.trim(),
+            description:form.description.value.trim(),
+            member_ids:memberIds
+          })});
           go("/chat/?id="+encodeURIComponent(data.conversation.id));
-        }catch(error){status.textContent=error.message;btn.disabled=false;}
+        }catch(error){status.textContent=error.message;button.disabled=false;}
       };
       await loadMembers();
       return;
     }
-    box.innerHTML='<form class="form" id="postForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>العنوان<input name="title" maxlength="255"></label><label>المحتوى<textarea name="body" rows="9" maxlength="10000" required></textarea></label><label>الهاشتاقات<input name="hashtags" placeholder="#قانون #دراسة"></label><label class="file-picker">إضافة صورة<input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif"></label><div id="uploadStatus"></div><button class="btn" type="submit">'+(type==="article"?"نشر المقال":"نشر المنشور")+'</button><div class="form-status"></div></form>';
+
+    box.innerHTML='<form class="form" id="postForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>العنوان<input name="title" maxlength="255"></label><label>المحتوى<textarea name="body" rows="9" maxlength="10000" required></textarea></label><label>الهاشتاقات<input name="hashtags" placeholder="#قانون #دراسة"></label><label class="file-picker">إضافة صورة<input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="btn" type="submit">'+(type==="article"?"نشر المقال":"نشر المنشور")+'</button><div class="form-status"></div></form>';
+
     const form=document.querySelector("#postForm");
-    form.onsubmit=async e=>{
-      e.preventDefault();const btn=form.querySelector("button[type=submit]"),status=form.querySelector(".form-status");btn.disabled=true;status.textContent="جارٍ النشر...";
+    form.onsubmit=async event=>{
+      event.preventDefault();
+      const button=form.querySelector("button[type=submit]");
+      const status=form.querySelector(".form-status");
+      const data=new FormData(form);
+      button.disabled=true;status.textContent="جارٍ النشر...";
       try{
-        const fd=new FormData(form),file=form.image.files?.[0],image=await fileToDataURL(file,2*1024*1024);
-        await api("/api/posts",{method:"POST",body:JSON.stringify({section:fd.get("section"),title:fd.get("title"),body:fd.get("body"),body_html:null,content_type:type==="article"?"article":"post",hashtags:String(fd.get("hashtags")||"").split(/[,\s]+/).filter(Boolean),image_url:image})});
+        const image=await fileToDataURL(form.image.files?.[0],2*1024*1024);
+        await api("/api/posts",{method:"POST",body:JSON.stringify({
+          section:data.get("section"),
+          title:data.get("title"),
+          body:data.get("body"),
+          body_html:null,
+          content_type:type==="article"?"article":"post",
+          hashtags:String(data.get("hashtags")||"").split(/[,\s]+/).filter(Boolean),
+          image_url:image
+        })});
+        notify(type==="article"?"تم نشر المقال.":"تم نشر المنشور.","success");
         go("/");
-      }catch(err){status.textContent=err.message;btn.disabled=false;}
+      }catch(error){status.textContent=error.message;button.disabled=false;}
     };
   };
-  tabs.forEach(x=>x.onclick=()=>renderType(x.dataset.createType));
-  renderType("post");
+
+  tabs.forEach(button=>button.onclick=()=>renderType(button.dataset.createType));
+  await renderType(new URLSearchParams(location.search).get("type")||"post");
 }
 
 async function renderProfile(){
