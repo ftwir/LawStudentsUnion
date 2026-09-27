@@ -1,60 +1,57 @@
 services:
   - type: web
-    name: lsu-main
-    runtime: node
-    plan: free
-    buildCommand: cd backend && npm install
-    startCommand: node backend/server.js
-    healthCheckPath: /health
-    buildFilter:
-      paths:
-        - backend/**
-        - public/**
-        - render.yaml
+    name: law-union-api-v2
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: new_app/backend
+    buildCommand: pip install -r requirements.txt && python manage.py makemigrations app --noinput && python manage.py migrate --noinput && python manage.py collectstatic --noinput
+    startCommand: daphne -b 0.0.0.0 -p $PORT config.asgi:application
+    healthCheckPath: /api/health/
+    autoDeployTrigger: commit
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: lsu-postgres
+          name: law-union-v2-db
           property: connectionString
-      - key: NODE_ENV
-        value: production
-      - key: APP_DEVICE_SALT
+      - key: REDIS_URL
+        fromService:
+          name: law-union-v2-cache
+          type: keyvalue
+          property: connectionString
+      - key: SECRET_KEY
         generateValue: true
-      - key: GEMINI_API_KEY
+      - key: AGENT_BOOTSTRAP_TOKEN
+        generateValue: true
+      - key: AGENT_USERNAME
+        value: agent
+      - key: AGENT_EMAIL
+        value: agent@lawunion.local
+      - key: AGENT_PASSWORD
         sync: false
-      - key: GEMINI_ASSISTANT_MODEL
-        value: gemini-2.5-flash
-      - key: RATE_LIMIT_PER_MINUTE
-        value: "240"
-      - key: DB_POOL_MAX
-        value: "20"
+      - key: AGENT_TOTP_SECRET
+        sync: false
+      - key: DEBUG_MODE
+        value: "False"
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CORS_ALLOWED_ORIGINS
+        value: ""
+      - key: WEB_CONCURRENCY
+        value: "2"
 
-  - type: web
-    name: lsu-owner-manager
-    runtime: node
-    plan: free
-    rootDir: packages/manager-app
-    buildCommand: npm install
-    startCommand: npm start
-    healthCheckPath: /health
-    buildFilter:
-      paths:
-        - packages/manager-app/**
-        - render.yaml
-    envVars:
-      - key: STUDENT_API_URL
-        value: https://lawstudentsunionapi.onrender.com
-      - key: GITHUB_REPO
-        value: ftwir/LawStudentsUnion
-      - key: GITHUB_REF
-        value: main
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GITHUB_TOKEN
-        sync: false
-      - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+  - type: keyvalue
+    name: law-union-v2-cache
+    plan: starter
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
 
 databases:
-  - name: lsu-postgres
-    plan: free
+  - name: law-union-v2-db
+    plan: starter
+    region: oregon
+    databaseName: law_union_v2
+    user: law_union_v2_user
