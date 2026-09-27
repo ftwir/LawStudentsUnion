@@ -1,6 +1,9 @@
 const express=require("express");
 const path=require("path");
 const crypto=require("crypto");
+const fs=require("fs");
+const os=require("os");
+const {execFileSync}=require("child_process");
 const {GoogleGenAI}=require("@google/genai");
 const {Octokit}=require("@octokit/rest");
 
@@ -118,10 +121,23 @@ async function generateRepair({error,filePath,source,instruction}){
   const response=await ai.models.generateContent({model:GEMINI_MODEL,contents:prompt,config:{temperature:0.1}});
   return parseAIJson(response.text);
 }
+function validateReplacementSyntax(filePath,replacement){
+  const ext=path.extname(filePath).toLowerCase();
+  if(![".js",".mjs",".cjs"].includes(ext))return;
+  const tmp=path.join(os.tmpdir(),"lsu-ai-check-"+process.pid+"-"+Date.now()+ext);
+  try{
+    fs.writeFileSync(tmp,replacement,"utf8");
+    execFileSync(process.execPath,["--check",tmp],{stdio:["ignore","ignore","pipe"]});
+  }catch(error){
+    const detail=String(error?.stderr||error?.message||"Syntax validation failed").trim();
+    throw new Error("AI replacement failed syntax validation: "+detail.slice(0,2000));
+  }finally{
+    try{fs.rmSync(tmp,{force:true});}catch{}
+  }
+}
 async function stageRepair(filePath,replacement,sha,diagnosis){
   if(!replacement||typeof replacement!=="string")throw new Error("AI returned no replacement code");
-  const ext=path.extname(filePath).toLowerCase();
-  if([".js",".mjs",".cjs"].includes(ext))new Function(replacement);
+  validateReplacementSyntax(filePath,replacement);
   const token=process.env.GITHUB_TOKEN;
   if(!token)throw new Error("GITHUB_TOKEN is not configured");
   const [owner,repo]=GITHUB_REPO.split("/");
