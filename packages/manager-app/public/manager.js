@@ -13,7 +13,7 @@ async function api(path,opts={}){
   return d;
 }
 function setStatus(message,bad=false){
-  const x=$('#globalStatus'); if(x){x.textContent=message||'';x.className='status '+(bad?'err':'ok');}
+  const x=$('#globalStatus')||$('#loginStatus'); if(x){x.textContent=message||'';x.className='status '+(bad?'err':'ok');}
 }
 function loginView(){
   $('#loginView').hidden=false; $('#dashboardView').hidden=true;
