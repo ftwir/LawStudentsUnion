@@ -1,4 +1,5 @@
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
+import os
 from rest_framework import generics, viewsets, permissions as drf_permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -36,6 +37,39 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = AgentAwareTokenObtainPairSerializer
     permission_classes = [drf_permissions.AllowAny]
 
+
+class MFABootstrapView(APIView):
+    """One-time enrollment gate. It never returns a JWT/session."""
+    permission_classes = [drf_permissions.AllowAny]
+
+    def post(self, request):
+        if not os.getenv("AGENT_BOOTSTRAP_TOKEN") or request.data.get("bootstrap_token") != os.getenv("AGENT_BOOTSTRAP_TOKEN"):
+            return Response({"detail": "Invalid bootstrap token."}, status=403)
+        user = authenticate(username=request.data.get("username", ""), password=request.data.get("password", ""))
+        if not user or not user.is_agent():
+            return Response({"detail": "Invalid Agent credentials."}, status=401)
+        if TOTPDevice.objects.filter(user=user, confirmed=True).exists():
+            return Response({"detail": "Agent MFA is already enabled."}, status=409)
+        TOTPDevice.objects.filter(user=user, confirmed=False).delete()
+        device = TOTPDevice.objects.create(user=user, name="agent-default", confirmed=False)
+        return Response({"otpauth_url": device.config_url})
+
+class MFABootstrapConfirmView(APIView):
+    permission_classes = [drf_permissions.AllowAny]
+
+    def post(self, request):
+        if not os.getenv("AGENT_BOOTSTRAP_TOKEN") or request.data.get("bootstrap_token") != os.getenv("AGENT_BOOTSTRAP_TOKEN"):
+            return Response({"detail": "Invalid bootstrap token."}, status=403)
+        user = authenticate(username=request.data.get("username", ""), password=request.data.get("password", ""))
+        if not user or not user.is_agent():
+            return Response({"detail": "Invalid Agent credentials."}, status=401)
+        device = TOTPDevice.objects.filter(user=user, confirmed=False).first()
+        if not device or not device.verify_token(str(request.data.get("otp_token", ""))):
+            return Response({"detail": "Invalid TOTP code."}, status=400)
+        device.confirmed = True
+        device.save(update_fields=["confirmed"])
+        log_action(user, "completed initial Agent MFA enrollment")
+        return Response({"detail": "MFA enabled. Future Agent logins require the TOTP code."})
 
 class MFASetupView(APIView):
     """Agent-only: (re)provision their TOTP device. Returns an otpauth:// URI to render as a QR code."""
