@@ -66,17 +66,19 @@ function validateImageDataUrl(value) {
         /^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\r\n]+$/i.test(value);
 }
 
-async function serializePost(row) {
-    const comments = await pool.query(`
-        SELECT c.id, c.body, c.created_at,
-               u.id AS author_id, u.full_name AS author_name,
-               u.avatar_url AS author_avatar, u.profile_slug AS author_slug
-        FROM post_comments c
-        INNER JOIN users u ON u.id = c.author_id
-        WHERE c.post_id = $1
-        ORDER BY c.created_at ASC
-        LIMIT 100
-    `, [row.id]);
+async function serializePost(row, commentRows = null) {
+    const comments = commentRows
+        ? { rows: commentRows }
+        : await pool.query(`
+            SELECT c.id, c.body, c.created_at,
+                   u.id AS author_id, u.full_name AS author_name,
+                   u.avatar_url AS author_avatar, u.profile_slug AS author_slug
+            FROM post_comments c
+            INNER JOIN users u ON u.id = c.author_id
+            WHERE c.post_id = $1
+            ORDER BY c.created_at ASC
+            LIMIT 100
+        `, [row.id]);
 
     return {
         id: Number(row.id),
@@ -142,7 +144,30 @@ app.get("/api/posts", async (req, res) => {
         `, [section, viewer ? viewer.id : null, limit]);
 
         const posts = [];
-        for (const row of result.rows) posts.push(await serializePost(row));
+        const postIds = result.rows.map(row => Number(row.id));
+        const commentRows = postIds.length
+            ? await pool.query(`
+                SELECT c.id, c.post_id, c.body, c.created_at,
+                       u.id AS author_id, u.full_name AS author_name,
+                       u.avatar_url AS author_avatar, u.profile_slug AS author_slug
+                FROM post_comments c
+                INNER JOIN users u ON u.id = c.author_id
+                WHERE c.post_id = ANY($1::bigint[])
+                ORDER BY c.created_at ASC
+            `, [postIds])
+            : { rows: [] };
+
+        const commentsByPost = new Map();
+        for (const comment of commentRows.rows) {
+            const key = String(comment.post_id);
+            const bucket = commentsByPost.get(key) || [];
+            if (bucket.length < 100) bucket.push(comment);
+            commentsByPost.set(key, bucket);
+        }
+
+        for (const row of result.rows) {
+            posts.push(await serializePost(row, commentsByPost.get(String(row.id)) || []));
+        }
         res.json({ ok: true, posts });
     } catch (error) {
         console.error(error);
