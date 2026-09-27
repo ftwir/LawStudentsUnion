@@ -94,16 +94,16 @@ function createOwnerRouter(pool) {
   });
 
   const dataViews={
-    announcements:`SELECT id,title,body,created_at FROM announcements ORDER BY created_at DESC LIMIT $1`,
-    activities:`SELECT id,title,body,event_date,created_at FROM activities ORDER BY created_at DESC LIMIT $1`,
+    announcements:`SELECT id,title,body,tag,is_published,published_at FROM announcements ORDER BY published_at DESC LIMIT $1`,
+    activities:`SELECT id,title,body,tag,event_date,is_published FROM activities ORDER BY event_date DESC NULLS LAST,id DESC LIMIT $1`,
     schedules:`SELECT * FROM schedules ORDER BY id DESC LIMIT $1`,
     posts:`SELECT id,author_id,section,title,body,content_type,hashtags,is_published,is_pinned,created_at,updated_at FROM posts ORDER BY created_at DESC LIMIT $1`,
-    post_likes:`SELECT id,post_id,user_id,created_at FROM post_likes ORDER BY id DESC LIMIT $1`,
+    post_likes:`SELECT post_id,user_id,created_at FROM post_likes ORDER BY created_at DESC LIMIT $1`,
     post_comments:`SELECT id,post_id,author_id,body,created_at FROM post_comments ORDER BY id DESC LIMIT $1`,
     conversations:`SELECT id,name,type,is_private,created_by,host_user_id,messaging_paused,voice_room_active,created_at FROM conversations ORDER BY id DESC LIMIT $1`,
     conversation_members:`SELECT conversation_id,user_id,role,is_muted,inbox_position_at,joined_at FROM conversation_members ORDER BY conversation_id DESC LIMIT $1`,
     messages:`SELECT id,conversation_id,sender_id,body,created_at,is_read FROM messages ORDER BY id DESC LIMIT $1`,
-    notifications:`SELECT id,user_id,type,title,body,created_at FROM notifications ORDER BY id DESC LIMIT $1`,
+    notifications:`SELECT id,title,body,is_published,published_at FROM notifications ORDER BY published_at DESC LIMIT $1`,
     user_notifications:`SELECT id,recipient_id,actor_id,kind,title,body,source,reference_type,reference_id,is_read,created_at FROM user_notifications ORDER BY id DESC LIMIT $1`,
     friendships:`SELECT user_id,friend_id,status,created_at FROM friendships ORDER BY created_at DESC LIMIT $1`,
     registrations:`SELECT id,user_id,full_name,student_id,academic_year,email,phone,note,status,rejection_reason,created_at FROM registrations ORDER BY id DESC LIMIT $1`,
