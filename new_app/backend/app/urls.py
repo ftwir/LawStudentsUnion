@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
-    RegisterView, CustomTokenObtainPairView, MFABootstrapView, MFABootstrapConfirmView, MFASetupView, MFAConfirmView, MeView,
+    health_view, RegisterView, CustomTokenObtainPairView, MFABootstrapView, MFABootstrapConfirmView, MFASetupView, MFAConfirmView, MeView,
     UserManagementViewSet, SubHubViewSet, PostViewSet, CommentViewSet,
     ChatRoomViewSet, MessageViewSet,
     MembershipRequestViewSet, AdminPermissionViewSet, AuditLogListView,
@@ -20,6 +20,7 @@ router.register(r"membership-requests", MembershipRequestViewSet, basename="memb
 router.register(r"admin/permissions", AdminPermissionViewSet, basename="adminpermission")
 
 urlpatterns = [
+    path('health/', health_view, name='health'),
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/login/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/mfa/bootstrap/", MFABootstrapView.as_view(), name="mfa-bootstrap"),
