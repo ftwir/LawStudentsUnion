@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization.dart';
@@ -24,7 +23,6 @@ class LawUnionApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         locale: locale,
         supportedLocales: const [Locale('en'), Locale('ar')],
-        localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
         theme: AppTheme.dark,
         home: LoginScreen(repository: repository),
       ),
