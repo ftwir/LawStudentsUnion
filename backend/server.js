@@ -152,27 +152,6 @@ app.get("/health", async (req, res) => {
     }
 });
 
-app.get("/api/test", async (req, res) => {
-    try {
-        const result = await pool.query(
-            "SELECT NOW() AS time"
-        );
-
-        res.json({
-            ok: true,
-            message: "API and database are working.",
-            time: result.rows[0].time
-        });
-    } catch (error) {
-        console.error(error);
-
-        res.status(500).json({
-            ok: false,
-            message: "Database connection failed."
-        });
-    }
-});
-
 app.post("/api/auth/register", async (req, res) => {
     try {
         const {
