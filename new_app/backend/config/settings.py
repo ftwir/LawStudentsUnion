@@ -11,7 +11,9 @@ INSTALLED_APPS = ["daphne","django.contrib.admin","django.contrib.auth","django.
 MIDDLEWARE = ["corsheaders.middleware.CorsMiddleware","django.middleware.security.SecurityMiddleware","django.contrib.sessions.middleware.SessionMiddleware","django.middleware.common.CommonMiddleware","django.middleware.csrf.CsrfViewMiddleware","django.contrib.auth.middleware.AuthenticationMiddleware","django_otp.middleware.OTPMiddleware","django.contrib.messages.middleware.MessageMiddleware","django.middleware.clickjacking.XFrameOptionsMiddleware"]
 ROOT_URLCONF="config.urls"; ASGI_APPLICATION="config.asgi.application"; AUTH_USER_MODEL="app.CustomUser"
 TEMPLATES=[{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.debug","django.template.context_processors.request","django.contrib.auth.context_processors.auth","django.contrib.messages.context_processors.messages"]}}]
-DATABASES={"default":dj_database_url.config(conn_max_age=600)}
+DATABASES={'default':dj_database_url.config(default=f'sqlite:///{BASE_DIR / "local.sqlite3"}',conn_max_age=600)}
+if os.getenv('DATABASE_URL') and DATABASES['default']['ENGINE']=='django.db.backends.postgresql':
+    DATABASES['default'].setdefault('OPTIONS',{})['options']='-c search_path=law_union_v2,public'
 CHANNEL_LAYERS={"default":{"BACKEND":"channels_redis.core.RedisChannelLayer","CONFIG":{"hosts":[config("REDIS_URL",default="redis://localhost:6379")]}}}
 REST_FRAMEWORK={"DEFAULT_AUTHENTICATION_CLASSES":["rest_framework_simplejwt.authentication.JWTAuthentication"],"DEFAULT_PERMISSION_CLASSES":["rest_framework.permissions.IsAuthenticated"]}
 from datetime import timedelta
