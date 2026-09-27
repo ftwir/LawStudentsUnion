@@ -2,7 +2,7 @@ services:
   - type: web
     name: law-union-api-v2
     runtime: python
-    plan: starter
+    plan: free
     region: frankfurt
     rootDir: new_app/backend
     buildCommand: pip install -r requirements.txt && python manage.py shell -c "from django.db import connection; connection.cursor().execute('CREATE SCHEMA IF NOT EXISTS law_union_v2')" && python manage.py makemigrations app --noinput && python manage.py migrate --noinput && python manage.py bootstrap_agent && python manage.py collectstatic --noinput
@@ -38,12 +38,4 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         value: ""
       - key: WEB_CONCURRENCY
-        value: "2"
-
-  - type: keyvalue
-    name: law-union-v2-cache
-    plan: starter
-    region: frankfurt
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []
-
+        value: "1"
