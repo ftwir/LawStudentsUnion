@@ -11,6 +11,22 @@ const GITHUB_REPO=String(process.env.GITHUB_REPO||"ftwir/LawStudentsUnion");
 const GITHUB_REF=String(process.env.GITHUB_REF||"main");
 const GEMINI_MODEL=String(process.env.GEMINI_MODEL||"gemini-2.5-flash");
 const AGENT_CHANNEL_SECRET=String(process.env.AGENT_CHANNEL_SECRET||"");
+function managerToken(req){
+  const auth=req.headers.authorization||"";
+  if(auth.startsWith("Bearer "))return auth.slice(7).trim();
+  const cookie=String(req.headers.cookie||"").split(";").map(x=>x.trim()).find(x=>x.startsWith("lsu_manager_token="));
+  return cookie?decodeURIComponent(cookie.slice("lsu_manager_token=".length)):"";
+}
+function setManagerCookie(res,token){
+  let value="lsu_manager_token="+encodeURIComponent(token)+"; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000";
+  if(process.env.NODE_ENV==="production")value+="; Secure";
+  res.setHeader("Set-Cookie",value);
+}
+function clearManagerCookie(res){
+  let value="lsu_manager_token=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0";
+  if(process.env.NODE_ENV==="production")value+="; Secure";
+  res.setHeader("Set-Cookie",value);
+}
 
 app.disable("x-powered-by");
 app.use(express.json({limit:"2mb"}));
@@ -34,10 +50,10 @@ function verifyAgentRequest(req){
   return safeEqual(String(req.headers["x-agent-signature"]||""),signPayload(raw));
 }
 async function verifyOwnerSession(req){
-  const auth=req.headers.authorization||"";
-  if(!STUDENT_API_URL||!auth.startsWith("Bearer "))return false;
+  const token=managerToken(req);
+  if(!STUDENT_API_URL||!token)return false;
   try{
-    const response=await fetch(STUDENT_API_URL+"/api/owner/status",{headers:{Authorization:auth,Accept:"application/json"}});
+    const response=await fetch(STUDENT_API_URL+"/api/owner/status",{headers:{Authorization:"Bearer "+token,Accept:"application/json"}});
     return response.ok;
   }catch{return false;}
 }
@@ -52,7 +68,7 @@ async function managerAuth(req,res,next){
 }
 async function mainApi(pathName,req,options={}){
   if(!STUDENT_API_URL)throw new Error("STUDENT_API_URL is not configured");
-  const headers={Accept:"application/json",Authorization:req.headers.authorization||""};
+  const token=managerToken(req); const headers={Accept:"application/json",Authorization:token?"Bearer "+token:""};
   if(options.body!==undefined)headers["Content-Type"]="application/json";
   const response=await fetch(STUDENT_API_URL+pathName,{...options,headers});
   const data=await response.json().catch(()=>({ok:false,message:"Main API returned invalid JSON."}));
@@ -129,11 +145,11 @@ app.post("/api/manager/login",async(req,res)=>{
     const identifier=String(req.body?.identifier||"").trim();
     const password=String(req.body?.password||"");
     if(!identifier||!password)return res.status(400).json({ok:false,message:"Identifier and password are required."});
-    const result=await fetch(STUDENT_API_URL+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify({identifier,password})});
+    const result=await fetch(STUDENT_API_URL+"/api/auth/manager-login",{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify({identifier,password})});
     const data=await result.json().catch(()=>({ok:false,message:"Invalid main API response."}));
     if(!result.ok||!data.ok||!data.token)return res.status(result.status||401).json({ok:false,message:data.message||"Invalid credentials."});
     if(data.user?.role!=="owner")return res.status(403).json({ok:false,message:"Only the owner account can enter the manager."});
-    res.json({ok:true,token:data.token,user:{id:data.user.id,full_name:data.user.full_name,role:data.user.role}});
+    setManagerCookie(res,data.token); res.json({ok:true,user:{id:data.user.id,full_name:data.user.full_name,role:data.user.role}});
   }catch(error){
     console.error(error);
     res.status(502).json({ok:false,message:"Could not reach the main API."});
@@ -141,6 +157,9 @@ app.post("/api/manager/login",async(req,res)=>{
 });
 
 app.get("/health",(req,res)=>res.json({ok:true,service:"Law Students Union Owner Manager",authentication:"database-owner-session",ai:Boolean(process.env.GEMINI_API_KEY),github:Boolean(process.env.GITHUB_TOKEN),timestamp:new Date().toISOString()}));
+app.get("/api/manager/me",managerAuth,async(req,res)=>res.json({ok:true,manager:"owner"}));
+app.post("/api/manager/logout",(req,res)=>{clearManagerCookie(res);res.json({ok:true})});
+
 
 app.get("/api/manager/overview",managerAuth,async(req,res)=>{
   try{
