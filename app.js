@@ -2112,6 +2112,29 @@ function bindGlobalControls(){
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bindGlobalControls,{once:true});
 else bindGlobalControls();
 
+// Navigation safety net: dynamically-rendered buttons must remain functional even
+// when their local binding is replaced by a page render or a polling refresh.
+document.addEventListener('click',function(event){
+  const button=event.target?.closest?.('button[data-page]');
+  if(!button || button.disabled)return;
+  const target=button.dataset.page;
+  if(!target)return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  Promise.resolve(page(target)).catch(error=>{
+    const message=error?.message||'تعذر فتح الصفحة.';
+    if(app) app.innerHTML='<div class="empty"><h3>تعذر فتح الصفحة</h3><p>'+escapeHTML(message)+'</p><button type="button" class="btn" data-retry-page="'+escapeHTML(target)+'">إعادة المحاولة</button></div>';
+  });
+  if(document.querySelector('#drawer.open'))drawer(false);
+},true);
+
+document.addEventListener('click',function(event){
+  const retry=event.target?.closest?.('[data-retry-page]');
+  if(!retry)return;
+  event.preventDefault();
+  page(retry.dataset.retryPage).catch(()=>{});
+});
+
 /* =========================
    PERFORMANCE HELPERS
 ========================= */
