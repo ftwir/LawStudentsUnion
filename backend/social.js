@@ -92,11 +92,22 @@ const moduleExports = function(app, pool, requireAuth) {
 
   app.get("/api/chat/conversations", requireAuth(async (req,res)=>{
     const r=await pool.query("SELECT c.id,c.name,c.description,c.cover_image_url,c.hashtags,c.type,c.is_private,c.created_at,c.host_user_id,c.messaging_paused,c.voice_room_active,COALESCE(mycm.is_muted,FALSE) AS is_muted,COALESCE(mycm.inbox_position_at,c.created_at) AS inbox_position_at,COALESCE((SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1),'') AS last_message,(SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at FROM conversations c LEFT JOIN conversation_members mycm ON mycm.conversation_id=c.id AND mycm.user_id=$1 WHERE c.is_private=FALSE OR EXISTS(SELECT 1 FROM conversation_members mine WHERE mine.conversation_id=c.id AND mine.user_id=$1) ORDER BY CASE WHEN COALESCE(mycm.is_muted,FALSE) THEN COALESCE(mycm.inbox_position_at,c.created_at) ELSE COALESCE((SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1),c.created_at) END DESC",[req.user.id]);
-    const conversations=[];
-    for(const c of r.rows){
-      const members=await pool.query("SELECT u.id,u.full_name,u.avatar_url,u.profile_slug,cm.role AS membership_role FROM conversation_members cm JOIN users u ON u.id=cm.user_id WHERE cm.conversation_id=$1 ORDER BY CASE cm.role WHEN 'host' THEN 0 WHEN 'cohost' THEN 1 ELSE 2 END,u.full_name",[c.id]);
-      conversations.push({...c,id:Number(c.id),members:members.rows});
+    const conversationIds=r.rows.map(row=>Number(row.id));
+    const membersResult=conversationIds.length
+      ? await pool.query("SELECT cm.conversation_id,u.id,u.full_name,u.avatar_url,u.profile_slug,cm.role AS membership_role FROM conversation_members cm JOIN users u ON u.id=cm.user_id WHERE cm.conversation_id=ANY($1::bigint[]) ORDER BY cm.conversation_id,CASE cm.role WHEN 'host' THEN 0 WHEN 'cohost' THEN 1 ELSE 2 END,u.full_name",[conversationIds])
+      : {rows:[]};
+    const membersByConversation=new Map();
+    for(const member of membersResult.rows){
+      const key=String(member.conversation_id);
+      const list=membersByConversation.get(key)||[];
+      list.push({...member,id:Number(member.id)});
+      membersByConversation.set(key,list);
     }
+    const conversations=r.rows.map(row=>({
+      ...row,
+      id:Number(row.id),
+      members:membersByConversation.get(String(row.id))||[]
+    }));
     res.json({ok:true,conversations});
   }));
 
