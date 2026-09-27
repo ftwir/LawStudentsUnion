@@ -26,6 +26,7 @@ function attachRealtime(server) {
   server.on('upgrade', async (request, socket, head) => {
     const url = new URL(request.url || '/', 'http://localhost');
     if (url.pathname !== '/ws') return;
+    if (!request.headers.cookie && url.searchParams.get('token')) request.headers.authorization = 'Bearer ' + url.searchParams.get('token');
     try {
       const user = await authenticate(request);
       if (!user) {
