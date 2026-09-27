@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from django.contrib.auth import get_user_model, authenticate
 import os
 from rest_framework import generics, viewsets, permissions as drf_permissions
@@ -230,3 +231,11 @@ class AuditLogListView(generics.ListAPIView):
     queryset = AuditLog.objects.select_related("actor").order_by("-timestamp")[:500]
     serializer_class = AuditLogSerializer
     permission_classes = [IsAdminOrAgent]
+
+def health_view(request):
+    from django.db import connection
+    try:
+        with connection.cursor() as c: c.execute('SELECT 1')
+        return JsonResponse({'ok':True,'database':'connected','service':'law-union-v2'})
+    except Exception:
+        return JsonResponse({'ok':False,'database':'disconnected'},status=503)
