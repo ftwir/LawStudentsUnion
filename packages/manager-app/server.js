@@ -93,7 +93,7 @@ function parseAIJson(value){
 function allowedEditPath(filePath){
   const file=String(filePath||"").replace(/\\/g,"/");
   if(!file||file.startsWith(".")||file.includes(".."))return false;
-  return /^(app\.js|style\.css|index\.html|assistant\/index\.html|[a-z-]+\/index\.html|backend\/|packages\/manager-app\/|worker\/)/.test(file);
+  return /^(public\/assets\/(app\.js|app\.css)|public\/index\.html|public\/activate\/index\.html|backend\/|packages\/manager-app\/|worker\/)/.test(file);
 }
 async function generateRepair({error,filePath,source,instruction}){
   const key=process.env.GEMINI_API_KEY;
@@ -190,6 +190,15 @@ for(const [method,local,upstream] of proxyRoutes){
     }catch(error){console.error(error);res.status(502).json({ok:false,message:error.message});}
   });
 }
+app.patch("/api/manager/chats/:id",managerAuth,async(req,res)=>{
+  try{
+    const {response,data}=await mainApi("/api/admin/chats/"+encodeURIComponent(req.params.id),req,{
+      method:"PATCH",
+      body:JSON.stringify({messaging_paused:req.body?.messaging_paused===true})
+    });
+    res.status(response.status).json(data);
+  }catch(error){console.error(error);res.status(502).json({ok:false,message:error.message});}
+});
 
 app.get("/api/manager/database/:table",managerAuth,async(req,res)=>{
   try{
