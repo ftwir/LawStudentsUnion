@@ -22,12 +22,31 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "8mb" }));
 app.disable("x-powered-by");
+app.set("trust proxy",1);
+const rateBuckets=new Map();
+const RATE_WINDOW_MS=60000;
+const RATE_LIMIT=240;
 app.use((req,res,next)=>{
+    const key=String(req.ip||req.headers["x-forwarded-for"]||"unknown");
+    const now=Date.now();
+    let bucket=rateBuckets.get(key);
+    if(!bucket||now-bucket.startedAt>=RATE_WINDOW_MS){
+        bucket={startedAt:now,count:0};
+        rateBuckets.set(key,bucket);
+    }
+    bucket.count+=1;
+    res.setHeader("X-RateLimit-Limit",String(RATE_LIMIT));
+    res.setHeader("X-RateLimit-Remaining",String(Math.max(0,RATE_LIMIT-bucket.count)));
+    if(bucket.count>RATE_LIMIT)return res.status(429).json({ok:false,message:"طلبات كثيرة. حاول مرة أخرى بعد قليل."});
     const requestId=String(req.headers["x-request-id"]||crypto.randomUUID());
     res.setHeader("X-Request-Id",requestId);
     req.requestId=requestId;
     next();
 });
+setInterval(()=>{
+    const now=Date.now();
+    for(const [key,bucket] of rateBuckets)if(now-bucket.startedAt>RATE_WINDOW_MS*2)rateBuckets.delete(key);
+},RATE_WINDOW_MS*2).unref();
 
 const PORT = process.env.PORT || 3000;
 
@@ -1350,155 +1369,6 @@ app.post("/api/membership/activate", async (req,res)=>{
         res.status(500).json({ok:false,message:"تعذر تفعيل العضوية."});
     }
 });
-
-app.get("/api/auth-test", (req, res) => {
-    res.send(`
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>اختبار تسجيل الحساب</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 500px;
-            margin: 40px auto;
-            padding: 20px;
-        }
-
-        input,
-        button {
-            width: 100%;
-            box-sizing: border-box;
-            padding: 12px;
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
-
-        button {
-            cursor: pointer;
-        }
-
-        pre {
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-    </style>
-</head>
-
-<body>
-
-    <h2>اختبار تسجيل الحساب</h2>
-
-    <form id="registerForm">
-
-        <input
-            id="full_name"
-            placeholder="الاسم الكامل"
-            required
-        >
-
-        <input
-            id="student_id"
-            placeholder="الرقم الجامعي"
-            required
-        >
-
-        <input
-            id="email"
-            type="email"
-            placeholder="البريد الإلكتروني"
-        >
-
-        <input
-            id="password"
-            type="password"
-            placeholder="كلمة المرور"
-            required
-        >
-
-        <button type="submit">
-            إنشاء الحساب
-        </button>
-
-    </form>
-
-    <pre id="result"></pre>
-
-    <script>
-        document
-            .getElementById("registerForm")
-            .addEventListener("submit", async function(event) {
-
-                event.preventDefault();
-
-                const result =
-                    document.getElementById("result");
-
-                result.textContent =
-                    "جارٍ إنشاء الحساب...";
-
-                try {
-
-                    const response = await fetch(
-                        "/api/auth/register",
-                        {
-                            method: "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body: JSON.stringify({
-                                full_name:
-                                    document
-                                        .getElementById("full_name")
-                                        .value,
-
-                                student_id:
-                                    document
-                                        .getElementById("student_id")
-                                        .value,
-
-                                email:
-                                    document
-                                        .getElementById("email")
-                                        .value || null,
-
-                                password:
-                                    document
-                                        .getElementById("password")
-                                        .value
-                            })
-                        }
-                    );
-
-                    const data =
-                        await response.json();
-
-                    result.textContent =
-                        JSON.stringify(
-                            data,
-                            null,
-                            2
-                        );
-
-                } catch (error) {
-
-                    result.textContent =
-                        "حدث خطأ في الاتصال: " +
-                        error.message;
-                }
-            });
-    </script>
-
-</body>
-</html>
-    `);
-});
-
 
 async function processExpiredPolls(){
   try{
