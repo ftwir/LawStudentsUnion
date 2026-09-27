@@ -18,7 +18,42 @@ function bindPosts(){$$('[data-like]').forEach(b=>b.onclick=async()=>{try{const 
 async function listPage(endpoint,title){const d=await api(endpoint);const items=d.items||[];render('<section class="section">'+shellTitle(title)+(items.length?'<div class="grid grid2">'+items.map(x=>'<article class="card pad"><h3>'+esc(x.title||title)+'</h3><p>'+esc(x.body||'')+'</p>'+(x.tag?'<span class="tag">'+esc(x.tag)+'</span>':'')+(x.event_date?'<p class="muted">'+date(x.event_date)+'</p>':'')+(x.location?'<p class="muted">'+esc(x.location)+'</p>':'')+'</article>').join('')+'</div>':'<div class="card empty">لا توجد بيانات حالياً.</div>')+'</section>')}
 async function schedule(){const d=await api('/api/schedule');render('<section class="section">'+shellTitle('الجدول الدراسي')+'<div class="card table"><table><thead><tr><th>المادة</th><th>اليوم</th><th>من</th><th>إلى</th><th>القاعة</th></tr></thead><tbody>'+d.items.map(x=>'<tr><td>'+esc(x.title)+'</td><td>'+esc(x.day_name||'')+'</td><td>'+esc(x.start_time||'')+'</td><td>'+esc(x.end_time||'')+'</td><td>'+esc(x.room||'')+'</td></tr>').join('')+'</tbody></table></div></section>')}
 async function polls(){const d=await api('/api/polls');render('<section class="section">'+shellTitle('الاستطلاعات','النتائج والنسب تتحدث من قاعدة البيانات.')+d.items.map(p=>{const opts=Array.isArray(p.options)?p.options:[],counts=Array.isArray(p.option_votes)?p.option_votes:[];return '<article class="card pad"><h3>'+esc(p.question)+'</h3><div class="poll-options">'+opts.map((o,i)=>{const row=counts.find(x=>Number(x.option_index)===i),n=Number(row?.votes||0),pct=p.votes?Math.round(n*100/Number(p.votes)):0;const voters=!p.anonymous&&Array.isArray(row?.voters)?row.voters:[];return '<button class="poll-option" data-vote="'+p.id+'" data-option="'+i+'"><span>'+esc(o)+'</span><strong>'+pct+'%</strong><small>'+n+' أصوات'+(voters.length?' · '+esc(voters.join('، ')):'')+'</small></button>'}).join('')+'</div><small class="muted">إجمالي الأصوات: '+Number(p.votes||0)+(p.closes_at?' · يغلق '+date(p.closes_at):'')+'</small></article>'}).join('')+'</section>');$$('[data-vote]').forEach(b=>b.onclick=async()=>{try{await api('/api/polls/'+b.dataset.vote+'/vote',{method:'POST',body:JSON.stringify({option_index:Number(b.dataset.option)})});polls()}catch(e){toast(e.message,true)}})}
-function auth(){render('<section class="section">'+shellTitle('تسجيل الدخول')+'<form id="auth" class="card form"><label>المعرف<input name="identifier" required></label><label>كلمة المرور<input name="password" type="password" required></label><button class="btn">دخول</button><a href="/registration/">طلب العضوية</a></form></section>');$('#auth').onsubmit=async e=>{e.preventDefault();try{const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});state.me=d.user;if(d.token)localStorage.setItem('lsu_token',d.token);location.href='/'}catch(x){toast(x.message,true)}}}
+function auth(){
+  const lang=localStorage.getItem('lsu_lang')==='en'?'en':'ar';
+  const copy={
+    ar:{dir:'rtl',title:'تسجيل الدخول',subtitle:'ادخل إلى حسابك في اتحاد طلبة كلية القانون.',identifier:'المعرف أو الرقم الدراسي أو البريد',password:'كلمة المرور',login:'دخول',register:'طلب العضوية',language:'اللغة',arabic:'العربية',english:'English',network:'تعذر الاتصال بخادم الاتحاد. تحقق من الاتصال وحاول مرة أخرى.',invalid:'بيانات الدخول غير صحيحة أو أن الحساب غير مفعّل.'},
+    en:{dir:'ltr',title:'Sign in',subtitle:'Sign in to the Law Students Union.',identifier:'Identifier, student ID, or email',password:'Password',login:'Sign in',register:'Membership request',language:'Language',arabic:'العربية',english:'English',network:'Unable to reach the Union server. Check your connection and try again.',invalid:'The credentials are incorrect or the account is not active.'}
+  }[lang];
+  document.documentElement.lang=lang;
+  document.documentElement.dir=copy.dir;
+  render('<section class="section auth-page"><div class="card form auth-card">'+
+    '<div class="auth-language"><span>'+copy.language+'</span><div class="lang-switch">'+
+    '<button type="button" class="lang-btn '+(lang==='ar'?'active':'')+'" data-lang="ar">'+copy.arabic+'</button>'+
+    '<button type="button" class="lang-btn '+(lang==='en'?'active':'')+'" data-lang="en">'+copy.english+'</button></div></div>'+
+    shellTitle(copy.title,copy.subtitle)+
+    '<form id="auth"><label>'+copy.identifier+'<input name="identifier" autocomplete="username" required></label>'+
+    '<label>'+copy.password+'<input name="password" type="password" autocomplete="current-password" required></label>'+
+    '<button class="btn" type="submit">'+copy.login+'</button>'+
+    '<a href="/registration/">'+copy.register+'</a><div id="authStatus" class="status" role="alert"></div></form></div></section>');
+  $$('.lang-btn').forEach(b=>b.onclick=()=>{localStorage.setItem('lsu_lang',b.dataset.lang);auth()});
+  const form=$('#auth');
+  form.onsubmit=async e=>{
+    e.preventDefault();
+    const button=form.querySelector('button[type="submit"]'); if(button)button.disabled=true;
+    const status=$('#authStatus'); if(status){status.textContent=lang==='ar'?'جارٍ التحقق...':'Checking...';status.className='status'}
+    try{
+      const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(form)))});
+      state.me=d.user;
+      if(d.token)localStorage.setItem('lsu_token',d.token);
+      location.href='/';
+    }catch(x){
+      const raw=String(x?.message||'');
+      const msg=/Failed to fetch|NetworkError|Load failed|HTTP 5\\d\\d/i.test(raw)?copy.network:(raw||copy.invalid);
+      if(status){status.textContent=msg;status.className='status err'}
+      else toast(msg,true);
+    }finally{if(button)button.disabled=false}
+  };
+}
 function registration(){render('<section class="section">'+shellTitle('طلب العضوية','تتحقق المنظومة من البيانات قبل المراجعة.')+'<form id="reg" class="card form"><label>الاسم الكامل<input name="full_name" required></label><label>الرقم الدراسي<input name="student_id" required></label><label>البريد الإلكتروني<input name="email" type="email"></label><label>الهاتف<input name="phone"></label><label>السنة الدراسية<input name="academic_year"></label><label>كلمة المرور<input name="password" minlength="8" type="password" required></label><label>ملاحظة<textarea name="note"></textarea></label><button class="btn">إرسال الطلب</button></form></section>');$('#reg').onsubmit=async e=>{e.preventDefault();try{const d=await api('/api/auth/register',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});render('<div class="card empty">تم استلام طلب العضوية رقم '+d.registration.id+'.</div>')}catch(x){toast(x.message,true)}}}
 function activation(){render('<section class="section">'+shellTitle('تفعيل العضوية','بعد اعتماد طلبك، استخدم نفس الرقم الدراسي وكلمة المرور التي سجلت بها.')+'<form id="activate" class="card form"><label>الرقم الدراسي<input name="student_id" required></label><label>كلمة المرور<input name="password" type="password" minlength="8" required></label><button class="btn">تفعيل الحساب</button></form></section>');$('#activate').onsubmit=async e=>{e.preventDefault();try{const d=await api('/api/auth/activate',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});state.me=d.user;if(d.token)localStorage.setItem('lsu_token',d.token);toast('تم تفعيل العضوية');location.href='/'}catch(x){toast(x.message,true)}}}
 function create(){if(!state.me)return location.href='/login/';render('<section class="section">'+shellTitle('إنشاء','اختر نوع المحتوى الذي تريد نشره.')+'<div class="create-choice-grid"><button class="create-choice" data-type="post"><b>📝 منشور</b><small>منشور سريع وبسيط</small></button><button class="create-choice" data-type="article"><b>✒️ مقال</b><small>عنوان وتنسيق متقدم للنص</small></button><button class="create-choice" data-type="poll"><b>📊 استطلاع</b><small>حتى 6 خيارات ومدة وتصويت</small></button><button class="create-choice" data-type="embed"><b>🔗 رابط مضمّن</b><small>YouTube وروابط خارجية</small></button></div><div id="createEditor"></div></section>');$$('.create-choice').forEach(b=>b.onclick=()=>openCreateEditor(b.dataset.type))}
