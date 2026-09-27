@@ -12,37 +12,33 @@ class AppColors {
 
 class AppTheme {
   static ThemeData get dark => ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.bgPrimary,
-        primaryColor: AppColors.accentPrimary,
-        colorScheme: const ColorScheme.dark(
-          primary: AppColors.accentPrimary,
-          secondary: AppColors.accentGlow,
-          surface: AppColors.bgElevated,
-        ),
-        fontFamily: 'Sora',
-        textTheme: const TextTheme(
-          headlineMedium: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
-          ),
-          bodyMedium: TextStyle(color: AppColors.textSecondary),
-        ),
-        cardTheme: CardTheme(
-          color: AppColors.bgElevated,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.borderGlow, width: 1),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.accentPrimary,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-          ),
-        ),
-      );
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: AppColors.bgPrimary,
+    primaryColor: AppColors.accentPrimary,
+    colorScheme: const ColorScheme.dark(
+      primary: AppColors.accentPrimary,
+      secondary: AppColors.accentGlow,
+      surface: AppColors.bgElevated,
+    ),
+    fontFamily: 'Sora',
+    textTheme: const TextTheme(
+      headlineMedium: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+      bodyMedium: TextStyle(color: AppColors.textSecondary),
+    ),
+    cardTheme: CardThemeData(
+      color: AppColors.bgElevated,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+        side: BorderSide(color: AppColors.borderGlow, width: 1),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(AppColors.accentPrimary),
+        foregroundColor: WidgetStatePropertyAll(Colors.white),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 14, horizontal: 24)),
+      ),
+    ),
+  );
 }
