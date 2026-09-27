@@ -43,7 +43,7 @@ services:
         - render.yaml
     envVars:
       - key: STUDENT_API_URL
-        value: https://lawstudentsunion.onrender.com
+        value: https://lawstudentsunionapi.onrender.com
       - key: GITHUB_REPO
         value: ftwir/LawStudentsUnion
       - key: GITHUB_REF
