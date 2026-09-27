@@ -471,19 +471,7 @@ function updateDrawer(){
   content.innerHTML = html;
 
 
-  content
-    .querySelectorAll('[data-page]')
-    .forEach(button => {
-
-      button.onclick = () => {
-
-        page(button.dataset.page);
-
-        drawer(false);
-      };
-
-    });
-
+  // Navigation is handled by the global delegated click handler.
 
   const logoutButton =
     document.querySelector('#logoutButton');
@@ -618,7 +606,7 @@ async function renderHome(){
       <div class="feed" id="homePosts"><div class="empty">جارٍ تحميل المنشورات...</div></div>
     </div>`;
 
-  app.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
+  // Navigation is handled by the global delegated click handler.
   const count=await getOnlineCount();const el=document.querySelector('#onlineCount');if(el)el.textContent=count;
   await refreshPostsIn(document.querySelector('#homePosts'),'community');
 }
@@ -1525,6 +1513,7 @@ async function page(p, profileIdentifier = null){
         try{
           const fr=await fetch(API+'/api/friends/status/'+user.id,{headers:{Authorization:'Bearer '+getToken()}});
           const fx=await fr.json();
+          if(!fb)return;
           if(fx.status==='friends'){fb.textContent='✓ صديق';fb.disabled=true;}
           else if(fx.status==='pending_sent'){fb.textContent='تم إرسال الطلب';fb.disabled=true;}
           else if(fx.status==='pending_received'){fb.textContent='قبول طلب الصداقة';}
@@ -1564,10 +1553,10 @@ async function page(p, profileIdentifier = null){
       const list=document.querySelector('#notificationList');
       if(currentPageName!=='notifications'||!list) return;
       list.innerHTML=(n.notifications||[]).length?(n.notifications||[]).map(x=>`<button class="notification-card ${x.is_read?'read':''}" data-notification-id="${x.id}"><strong>${escapeHTML(x.title)}</strong><span>${escapeHTML(x.body||'')}</span><small>${escapeHTML(new Date(x.created_at).toLocaleString('ar-LY'))}</small></button>`).join(''):'<div class="empty">لا توجد إشعارات.</div>';
-      const settings=st.settings||{}; for(const [id,key] of [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']]) document.querySelector('#'+id).checked=settings[key]!==false;
+      const settings=st.settings||{}; for(const [id,key] of [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']]){const control=document.querySelector('#'+id);if(control)control.checked=settings[key]!==false;}
       list.querySelectorAll('[data-notification-id]').forEach(b=>b.onclick=async()=>{await fetch(API+'/api/user-notifications/'+b.dataset.notificationId+'/read',{method:'PATCH',headers:{Authorization:'Bearer '+getToken()}});b.classList.add('read');updateNotificationDot();});
       document.querySelector('#readAllNotifications')?.addEventListener('click',async()=>{await fetch(API+'/api/user-notifications/read-all',{method:'POST',headers:{Authorization:'Bearer '+getToken()}});list.querySelectorAll('.notification-card').forEach(x=>x.classList.add('read'));updateNotificationDot();});
-      [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']].forEach(([id,key])=>document.querySelector('#'+id).onchange=async e=>{await fetch(API+'/api/notifications/settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({[key]:e.target.checked})});});
+      [['nsAll','all_members'],['nsAdmin','administration'],['nsFriends','friends'],['nsAnnouncements','announcements']].forEach(([id,key])=>{const control=document.querySelector('#'+id);if(!control)return;control.onchange=async e=>{await fetch(API+'/api/notifications/settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({[key]:e.target.checked})});};});
     }catch(e){if(document.querySelector('#notificationList')) document.querySelector('#notificationList').innerHTML='<div class="empty">'+escapeHTML(e.message)+'</div>';}
     return;
   }
@@ -1638,7 +1627,6 @@ async function page(p, profileIdentifier = null){
       });
       const currentList=document.querySelector('#chatList');
       if(!currentList)return;
-      if(!currentList)return;
       currentList.innerHTML=visible.length?visible.map(c=>{const canDelete=role()==='owner'||(role()==='admin'&&c.type==='public')||(c.type==='direct'&&c.is_private&&c.members?.some(m=>Number(m.id)===Number(currentUser.id)))||(c.type!=='direct'&&Number(c.host_user_id)===Number(currentUser.id));return `<div class="chat-row-wrap"><button class="chat-row ${active&&Number(active.id)===Number(c.id)?'active':''}" data-cid="${c.id}"><span class="chat-row-avatar">${c.members?.[0]?.avatar_url?'<img src="'+escapeHTML(c.members[0].avatar_url)+'">':'💬'}</span><span><strong>${escapeHTML(c.name||c.members?.filter(m=>Number(m.id)!==Number(currentUser.id)).map(m=>m.full_name).join('، ')||'محادثة')}</strong><small>${escapeHTML(c.last_message||'ابدأ المحادثة')}</small></span></button><button class="chat-mute-btn ${c.is_muted?'muted':''}" type="button" data-mute-chat="${c.id}" aria-label="${c.is_muted?'إلغاء كتم الدردشة':'كتم الدردشة'}" title="${c.is_muted?'إلغاء كتم الدردشة':'كتم الدردشة'}">${c.is_muted?'🔕':'🔔'}</button>${canDelete?`<button class="chat-delete-btn" type="button" data-delete-chat="${c.id}" aria-label="حذف الدردشة">حذف</button>`:''}</div>`;}).join(''):'<div class="empty">لا توجد محادثات مطابقة.</div>';
       currentList.querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.cid)));
       currentList.querySelectorAll('[data-mute-chat]').forEach(b=>b.onclick=async e=>{
@@ -1679,7 +1667,7 @@ async function page(p, profileIdentifier = null){
     let chatImageData=null,chatAudioData=null,voiceRecorder=null,voiceChunks=[];
     const imageInput=document.querySelector('#chatImageInput'), imagePreview=document.querySelector('#chatAttachmentPreview');
     document.querySelector('#chatImageButton')?.addEventListener('click',()=>imageInput?.click());
-    imageInput.onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('اختر صورة أقل من 5MB.');e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{chatImageData=rd.result;chatAudioData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🖼️ صورة مرفقة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment')?.addEventListener('click',()=>{chatImageData=null;if(imageInput)imageInput.value='';if(imagePreview)imagePreview.innerHTML='';});};rd.readAsDataURL(file);};
+    if(imageInput) imageInput.onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){alert('اختر صورة أقل من 5MB.');e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{chatImageData=rd.result;chatAudioData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🖼️ صورة مرفقة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment')?.addEventListener('click',()=>{chatImageData=null;if(imageInput)imageInput.value='';if(imagePreview)imagePreview.innerHTML='';});};rd.readAsDataURL(file);};
     document.querySelector('#chatVoiceButton')?.addEventListener('click',async()=>{if(voiceRecorder&&voiceRecorder.state==='recording'){voiceRecorder.stop();return;}if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){alert('تسجيل الصوت غير مدعوم في هذا المتصفح.');return;}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});voiceChunks=[];voiceRecorder=new MediaRecorder(stream);voiceRecorder.ondataavailable=e=>{if(e.data.size)voiceChunks.push(e.data);};voiceRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(voiceChunks,{type:voiceRecorder.mimeType||'audio/webm'});if(blob.size>1600000){alert('الرسالة الصوتية كبيرة جداً. سجل مقطعاً أقصر.');return;}const rd=new FileReader();rd.onload=()=>{chatAudioData=rd.result;chatImageData=null;imagePreview.innerHTML='<div class="chat-attachment-chip">🎙️ رسالة صوتية جاهزة <button type="button" id="clearChatAttachment">×</button></div>';document.querySelector('#clearChatAttachment')?.addEventListener('click',()=>{chatAudioData=null;if(imagePreview)imagePreview.innerHTML='';});};rd.readAsDataURL(blob);document.querySelector('#chatVoiceButton').textContent='🎙';};voiceRecorder.start();document.querySelector('#chatVoiceButton').textContent='⏹';}catch(error){alert('تعذر الوصول إلى الميكروفون. تأكد من السماح بالميكروفون.');}});
     const chatForm=document.querySelector('#chatForm');
     const chatBodyInput=chatForm?.elements?.body;
@@ -1726,12 +1714,15 @@ document.querySelector('#chatModal')?.addEventListener('click',e=>{if(e.target.i
 document.querySelector('#chatNewButton')?.addEventListener('click',()=>{selected=[];openCreateChatModal('direct');});
      document.querySelector('#chatType')?.addEventListener('change',e=>{
       const type=e.target.value;
-      document.querySelector('#chatNameWrap').style.display=type==='direct'?'none':'block';
-      const memberLabel=document.querySelector('#chatMembersSearch').closest('label');
-      memberLabel.style.display=type==='public'?'none':'block';
-      document.querySelector('#chatUsers').style.display=type==='public'?'none':'grid';
-      document.querySelector('#chatModalTitle').textContent=type==='group'?'إنشاء مجموعة خاصة':type==='direct'?'محادثة خاصة':'إنشاء قناة عامة';
-      document.querySelector('#chatName').placeholder=type==='public'?'مثال: قناة الأنشطة':'اسم المجموعة';document.querySelector('#chatDescriptionWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatHashtagsWrap').style.display=type==='direct'?'none':'block';document.querySelector('#chatCoverWrap').style.display=type==='direct'?'none':'flex';
+      const nameWrap=document.querySelector('#chatNameWrap'),search=document.querySelector('#chatMembersSearch'),users=document.querySelector('#chatUsers'),title=document.querySelector('#chatModalTitle'),name=document.querySelector('#chatName'),descWrap=document.querySelector('#chatDescriptionWrap'),tagsWrap=document.querySelector('#chatHashtagsWrap'),coverWrap=document.querySelector('#chatCoverWrap');
+      if(nameWrap)nameWrap.style.display=type==='direct'?'none':'block';
+      const memberLabel=search?.closest?.('label'); if(memberLabel)memberLabel.style.display=type==='public'?'none':'block';
+      if(users)users.style.display=type==='public'?'none':'grid';
+      if(title)title.textContent=type==='group'?'إنشاء مجموعة خاصة':type==='direct'?'محادثة خاصة':'إنشاء قناة عامة';
+      if(name)name.placeholder=type==='public'?'مثال: قناة الأنشطة':'اسم المجموعة';
+      if(descWrap)descWrap.style.display=type==='direct'?'none':'block';
+      if(tagsWrap)tagsWrap.style.display=type==='direct'?'none':'block';
+      if(coverWrap)coverWrap.style.display=type==='direct'?'none':'flex';
     });
     async function searchUsers(q){const rr=await fetch(API+'/api/chat/users?q='+encodeURIComponent(q||''),{headers:{Authorization:'Bearer '+getToken()}}),xx=await rr.json();if(document.querySelector('#chatUsers')) document.querySelector('#chatUsers').innerHTML=(xx.users||[]).map(u=>`<button class="member-pick ${selected.includes(Number(u.id))?'selected':''}" data-uid="${u.id}">${u.avatar_url?'<img src="'+escapeHTML(u.avatar_url)+'">':'👤'} ${escapeHTML(u.full_name)}</button>`).join('');document.querySelectorAll('.member-pick').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.uid);selected=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];b.classList.toggle('selected');});}
     document.querySelector('#chatCover')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const preview=document.querySelector('#chatCoverPreview');if(preview)preview.innerHTML='<img class="post-image create-image-preview" src="'+escapeHTML(rd.result)+'">';const coverInput=document.querySelector('#chatCover');if(coverInput)coverInput.dataset.data=rd.result;};rd.readAsDataURL(f);});document.querySelector('#chatMembersSearch')?.addEventListener('input',e=>searchUsers(e.target.value));searchUsers('');
@@ -2086,9 +2077,7 @@ function bindGlobalControls(){
   if(close) close.onclick=()=>drawer(false);
   const shade=document.querySelector('#shade');
   if(shade) shade.onclick=()=>drawer(false);
-  document.querySelectorAll('.bottom-nav [data-page], .top-action[data-page], #globalTabs [data-page]').forEach(button=>{
-    button.onclick=()=>page(button.dataset.page);
-  });
+  // Navigation is handled by the global delegated click handler.
   const creationButton=document.querySelector('.create-btn');
   if(creationButton){
     creationButton.type='button';
@@ -2112,27 +2101,21 @@ function bindGlobalControls(){
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bindGlobalControls,{once:true});
 else bindGlobalControls();
 
-// Navigation safety net: dynamically-rendered buttons must remain functional even
-// when their local binding is replaced by a page render or a polling refresh.
+// Single delegated navigation handler. Navigation buttons are intentionally
+// handled in one place so dynamically-rendered views cannot lose their behavior.
 document.addEventListener('click',function(event){
-  const button=event.target?.closest?.('button[data-page]');
-  if(!button || button.disabled)return;
-  const target=button.dataset.page;
-  if(!target)return;
+  const button=event.target?.closest?.('[data-page]');
+  if(!button || button.disabled) return;
+  const target=String(button.dataset.page||'').trim();
+  if(!target) return;
   event.preventDefault();
-  event.stopImmediatePropagation();
   Promise.resolve(page(target)).catch(error=>{
     const message=error?.message||'تعذر فتح الصفحة.';
-    if(app) app.innerHTML='<div class="empty"><h3>تعذر فتح الصفحة</h3><p>'+escapeHTML(message)+'</p><button type="button" class="btn" data-retry-page="'+escapeHTML(target)+'">إعادة المحاولة</button></div>';
+    if(app){
+      app.innerHTML='<div class="empty"><h3>تعذر فتح الصفحة</h3><p>'+escapeHTML(message)+'</p><button type="button" class="btn" data-page="'+escapeHTML(target)+'">إعادة المحاولة</button></div>';
+    }
   });
-  if(document.querySelector('#drawer.open'))drawer(false);
-},true);
-
-document.addEventListener('click',function(event){
-  const retry=event.target?.closest?.('[data-retry-page]');
-  if(!retry)return;
-  event.preventDefault();
-  page(retry.dataset.retryPage).catch(()=>{});
+  if(document.querySelector('#drawer.open')) drawer(false);
 });
 
 /* =========================
