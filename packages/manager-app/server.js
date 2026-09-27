@@ -190,6 +190,7 @@ for(const [method,local,upstream] of proxyRoutes){
     }catch(error){console.error(error);res.status(502).json({ok:false,message:error.message});}
   });
 }
+app.post("/api/manager/content",managerAuth,async(req,res)=>{try{const clean=req.body&&typeof req.body==="object"?{type:req.body.type,title:req.body.title,body:req.body.body,tag:req.body.tag,event_date:req.body.event_date,location:req.body.location}:{};const {response,data}=await mainApi("/api/admin/content",req,{method:"POST",body:JSON.stringify(clean)});res.status(response.status).json(data);}catch(error){res.status(502).json({ok:false,message:error.message});}});
 app.patch("/api/manager/chats/:id",managerAuth,async(req,res)=>{
   try{
     const {response,data}=await mainApi("/api/admin/chats/"+encodeURIComponent(req.params.id),req,{
