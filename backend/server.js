@@ -8,6 +8,7 @@ const crypto = require("crypto");
 const app = express();
 const { createOwnerRouter } = require("./routes/ownerRoutes");
 const { evaluateRegistration, normalizePhone, registrationPrompt } = require("./services/intelligence");
+const { answerAssistant } = require("./services/assistant");
 
 const allowedOrigins = String(process.env.CORS_ORIGINS || "").split(",").map(x => x.trim()).filter(Boolean);
 app.use(cors({
@@ -1188,6 +1189,35 @@ app.get("/api/assistant/context", requireAuth(async (req,res)=>{
     res.status(500).json({ok:false,message:"Assistant context unavailable."});
   }
 }));
+
+app.post("/api/assistant/chat", requireAuth(async (req,res)=>{
+  try{
+    const message=String(req.body?.message||"").trim();
+    if(!message) return res.status(400).json({ok:false,message:"اكتب رسالة للمساعد."});
+    const [activityRow,notifications,chats]=await Promise.all([
+      pool.query("SELECT current_page,resource_type,resource_id,last_activity_at,last_seen_at FROM user_activity WHERE user_id=$1",[req.user.id]),
+      pool.query("SELECT COUNT(*)::int AS count FROM user_notifications WHERE recipient_id=$1 AND is_read=FALSE",[req.user.id]),
+      pool.query("SELECT COUNT(*)::int AS count FROM conversation_members WHERE user_id=$1",[req.user.id])
+    ]);
+    const reply=await answerAssistant({
+      user:req.user,
+      activity:activityRow.rows[0]||null,
+      unreadNotifications:notifications.rows[0].count,
+      conversations:chats.rows[0].count,
+      message
+    });
+    await pool.query(
+      `INSERT INTO audit_logs(actor_user_id,action,target_type,target_id,details)
+       VALUES($1,'assistant.chat','user',$1,$2::jsonb)`,
+      [req.user.id,JSON.stringify({message:message.slice(0,500),provider:process.env.GEMINI_API_KEY?"gemini":"fallback"})]
+    );
+    res.json({ok:true,reply});
+  }catch(error){
+    console.error("assistant chat failed",error);
+    res.status(500).json({ok:false,message:"تعذر تشغيل المساعد حالياً."});
+  }
+}));
+
 
 app.post("/api/polls", requireAuth(async (req,res)=>{
   try{
