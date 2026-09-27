@@ -43,7 +43,7 @@ class AgentAwareTokenObtainPairSerializer(TokenObtainPairSerializer):
                     "MFA is not configured for this Agent account. Run /auth/mfa/setup/ first."
                 )
             if not device.verify_token(attrs.get("otp_token", "")):
-                raise serializers.ValidationError("Invalid or missing MFA code.")
+                raise serializers.ValidationError({"code":"MFA_REQUIRED","detail":"A valid TOTP code is required for Agent login."})
         return data
 
 
