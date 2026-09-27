@@ -68,7 +68,7 @@ const pool = new Pool({
         : false
 });
 
-app.use("/api/owner", createOwnerRouter(pool));\napp.use("/api", require("./social")(pool, { requireAuth, requireRoles }));
+app.use("/api/owner", createOwnerRouter(pool));\nrequire("./social")(app, pool, requireAuth);
 
 function hashPassword(password) {
     return new Promise((resolve, reject) => {
