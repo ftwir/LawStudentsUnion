@@ -5,6 +5,8 @@ version: 1.0.0+1
 environment:
   sdk: '>=3.3.0 <4.0.0'
 dependencies:
+  flutter_localizations:
+    sdk: flutter
   flutter:
     sdk: flutter
   dio: ^5.7.0
