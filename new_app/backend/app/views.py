@@ -120,6 +120,10 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         if new_role == User.Role.AGENT and not self.request.user.is_agent():
             raise PermissionDenied("Only the Agent may grant Agent-level access.")
         instance = serializer.save()
+        if instance.role == User.Role.ADMIN:
+            AdminPermission.objects.get_or_create(admin=instance)
+        else:
+            AdminPermission.objects.filter(admin=instance).delete()
         log_action(self.request.user, f"updated user {instance.username}", "CustomUser", instance.id)
 
 
