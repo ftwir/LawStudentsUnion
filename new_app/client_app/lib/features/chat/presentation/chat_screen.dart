@@ -94,7 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final interactive = m['interactive_payload'] != null;
     return Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (interactive) _interactive(m),
-      if (!interactive) Container(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10), decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (!interactive) Container(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10), decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('${m['sender'] ?? 'Member'}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
         const SizedBox(height: 3), Text('${m['text'] ?? ''}'),
       ])),
