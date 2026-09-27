@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../data/auth_repository.dart';
 import '../../../core/theme/app_theme.dart';
@@ -11,75 +10,80 @@ class LoginScreen extends StatefulWidget {
   @override State<LoginScreen> createState() => _LoginScreenState();
 }
 class _LoginScreenState extends State<LoginScreen> {
-  final username = TextEditingController(), password = TextEditingController(), otp = TextEditingController();
-  bool mfa = false, busy = false;
+  final username = TextEditingController();
+  final password = TextEditingController();
+  bool busy = false;
   String? error;
 
-  String tr(String en, String ar) => LanguageScope.of(context).isArabic ? ar : en;
-
   Future<void> submit() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() { busy = true; error = null; });
     try {
-      final u = await widget.repository.login(username.text.trim(), password.text, otpToken: mfa ? otp.text.trim() : null);
+      final u = await widget.repository.login(username.text.trim(), password.text);
       if (!mounted) return;
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen(user: u, repository: widget.repository)));
-    } on MfaEnrollmentRequiredException {
-      setState(() => error = tr('Agent MFA is not enrolled yet. Open the Admin App and complete first-time enrollment.', 'لم يتم إعداد MFA للوكيل بعد. افتح تطبيق الإدارة وأكمل الإعداد الأولي.'));
-    } on MfaRequiredException {
-      setState(() { mfa = true; error = tr('Enter the 6-digit code from your authenticator app.', 'أدخل رمز التحقق المكوّن من 6 أرقام من تطبيق المصادقة.'); });
     } on AuthFailedException catch (e) {
       setState(() => error = e.message);
     } catch (_) {
-      setState(() => error = tr('Unable to contact the server. Check your connection and try again.', 'تعذر الاتصال بالخادم. تحقق من اتصالك وحاول مرة أخرى.'));
+      setState(() => error = L10n.t(context, 'serverError'));
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
   @override Widget build(BuildContext context) {
-    final isAr = LanguageScope.of(context).isArabic;
+    final lang = LanguageScope.of(context);
+    final isAr = lang.isArabic;
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        body: Stack(children: [
-          Container(color: AppColors.bgPrimary),
-          Positioned(
-            top: 45, left: isAr ? 20 : null, right: isAr ? null : 20,
-            child: TextButton.icon(
-              onPressed: LanguageScope.of(context).toggle,
-              icon: const Icon(Icons.language),
-              label: Text(L10n.t(context, 'language')),
-            ),
-          ),
-          Center(child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                width: 340, padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(color: AppColors.bgElevated.withOpacity(.55), borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.borderGlow)),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.balance, size: 54, color: AppColors.accentPrimary),
-                  const SizedBox(height: 12),
-                  Text(L10n.t(context, 'app'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium),
-                  const SizedBox(height: 24),
-                  TextField(controller: username, textDirection: isAr ? TextDirection.rtl : TextDirection.ltr, decoration: InputDecoration(labelText: L10n.t(context, 'username'), prefixIcon: const Icon(Icons.person_outline))),
-                  const SizedBox(height: 12),
-                  TextField(controller: password, obscureText: true, textDirection: TextDirection.ltr, decoration: InputDecoration(labelText: L10n.t(context, 'password'), prefixIcon: const Icon(Icons.lock_outline))),
-                  if (mfa) ...[
-                    const SizedBox(height: 12),
-                    TextField(controller: otp, keyboardType: TextInputType.number, maxLength: 6, textAlign: TextAlign.center, decoration: InputDecoration(labelText: L10n.t(context, 'mfa'))),
-                  ],
-                  if (error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent))),
-                  const SizedBox(height: 20),
-                  SizedBox(width: double.infinity, child: ElevatedButton(onPressed: busy ? null : submit, child: Text(busy ? L10n.t(context, 'signing') : L10n.t(context, 'signIn')))),
-                ]),
+        backgroundColor: AppColors.bgPrimary,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Card(
+                  color: AppColors.bgElevated,
+                  elevation: 12,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Align(
+                        alignment: isAr ? Alignment.centerLeft : Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: lang.toggle,
+                          icon: const Icon(Icons.language),
+                          label: Text(L10n.t(context, 'language')),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Icon(Icons.balance, size: 58, color: AppColors.accentPrimary),
+                      const SizedBox(height: 12),
+                      Text(L10n.t(context, 'app'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
+                      const SizedBox(height: 6),
+                      Text(isAr ? 'منصة طلاب القانون' : 'Law student community platform', textAlign: TextAlign.center),
+                      const SizedBox(height: 26),
+                      TextField(controller: username, textInputAction: TextInputAction.next, textDirection: isAr ? TextDirection.rtl : TextDirection.ltr, decoration: InputDecoration(labelText: L10n.t(context, 'username'), prefixIcon: const Icon(Icons.person_outline))),
+                      const SizedBox(height: 14),
+                      TextField(controller: password, obscureText: true, textInputAction: TextInputAction.done, onSubmitted: (_) { if (!busy) submit(); }, decoration: InputDecoration(labelText: L10n.t(context, 'password'), prefixIcon: const Icon(Icons.lock_outline))),
+                      if (error != null) ...[
+                        const SizedBox(height: 14),
+                        Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+                      ],
+                      const SizedBox(height: 22),
+                      SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: busy ? null : submit, child: Text(busy ? L10n.t(context, 'signing') : L10n.t(context, 'signIn')))),
+                    ]),
+                  ),
+                ),
               ),
             ),
-          )),
-        ]),
+          ),
+        ),
       ),
     );
   }
-  @override void dispose() { username.dispose(); password.dispose(); otp.dispose(); super.dispose(); }
+  @override void dispose() { username.dispose(); password.dispose(); super.dispose(); }
 }
