@@ -11,6 +11,6 @@ async function check() {
     console.error("[agent] health check error:", err.message);
   }
 }
-console.log("[agent] self-healing monitor started");
+console.log("[agent] self-healing monitor started", { api: API_URL, intervalMs: INTERVAL_MS });
 await check();
 setInterval(check, INTERVAL_MS);
