@@ -246,11 +246,11 @@ async function renderSimpleData(endpoint,target,mapFn,title){
 }
 
 async function renderAnnouncements(){
-  await renderSimpleData("/api/announcements","#announcementList",d=>(d.announcements||[]).map(x=>'<article class="card content-card"><span class="tag">'+esc(x.tag||"عام")+'</span><h2>'+esc(x.title)+'</h2><p>'+esc(x.body)+'</p><small>'+esc(new Date(x.published_at||Date.now()).toLocaleString("ar-LY"))+'</small></article>');
+  await renderSimpleData("/api/announcements","#announcementList",d=>(d.announcements||[]).map(x=>'<article class="card content-card"><span class="tag">'+esc(x.tag||"عام")+'</span><h2>'+esc(x.title)+'</h2><p>'+esc(x.body)+'</p><small>'+esc(new Date(x.published_at||Date.now()).toLocaleString("ar-LY"))+'</small></article>'));
 }
 
 async function renderActivities(){
-  await renderSimpleData("/api/activities","#activityList",d=>(d.activities||[]).map(x=>'<article class="card content-card"><span class="tag">'+esc(x.tag||"فعالية")+'</span><h2>'+esc(x.title)+'</h2><p>'+esc(x.body)+'</p><div class="activity-meta"><b>'+esc(x.event_date?new Date(x.event_date).toLocaleDateString("ar-LY"):"موعد يحدد لاحقاً")+'</b></div></article>');
+  await renderSimpleData("/api/activities","#activityList",d=>(d.activities||[]).map(x=>'<article class="card content-card"><span class="tag">'+esc(x.tag||"فعالية")+'</span><h2>'+esc(x.title)+'</h2><p>'+esc(x.body)+'</p><div class="activity-meta"><b>'+esc(x.event_date?new Date(x.event_date).toLocaleDateString("ar-LY"):"موعد يحدد لاحقاً")+'</b></div></article>'));
 }
 
 async function renderSchedule(){
