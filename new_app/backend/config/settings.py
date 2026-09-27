@@ -19,7 +19,12 @@ REST_FRAMEWORK={"DEFAULT_AUTHENTICATION_CLASSES":["rest_framework_simplejwt.auth
 from datetime import timedelta
 SIMPLE_JWT={"ACCESS_TOKEN_LIFETIME":timedelta(minutes=30),"REFRESH_TOKEN_LIFETIME":timedelta(days=7),"SIGNING_KEY":SECRET_KEY,"AUTH_HEADER_TYPES":("Bearer",)}
 cors=[x.strip() for x in config("CORS_ALLOWED_ORIGINS",default="").split(",") if x.strip()]
-CORS_ALLOWED_ORIGINS=cors; CSRF_TRUSTED_ORIGINS=cors
+cors += [
+    "https://law-union-student-frontend-v2.onrender.com",
+    "https://law-union-admin-v2.onrender.com",
+]
+CORS_ALLOWED_ORIGINS=list(dict.fromkeys(cors))
+CSRF_TRUSTED_ORIGINS=CORS_ALLOWED_ORIGINS
 LANGUAGE_CODE="en-us"; TIME_ZONE="UTC"; USE_I18N=True; USE_TZ=True
 STATIC_URL="/static/"; STATIC_ROOT=BASE_DIR/"staticfiles"; DEFAULT_AUTO_FIELD="django.db.models.BigAutoField"
 SECURE_SSL_REDIRECT=not DEBUG; SESSION_COOKIE_SECURE=not DEBUG; CSRF_COOKIE_SECURE=not DEBUG
