@@ -466,6 +466,44 @@ async function renderCreate(){
   await renderType(new URLSearchParams(location.search).get("type")||"post");
 }
 
+async function renderAssistant(){
+  if(!state.user){go("/login/");return;}
+  const form=document.querySelector("#assistantForm");
+  const messages=document.querySelector("#assistantMessages");
+  if(!form||!messages)return;
+  const submit=async message=>{
+    const clean=String(message||"").trim();
+    if(!clean)return;
+    const userBubble=document.createElement("div");
+    userBubble.className="card assistant-message";
+    userBubble.style.cssText="padding:12px;background:rgba(123,97,255,.10);margin-inline-start:12%";
+    userBubble.textContent=clean;
+    messages.appendChild(userBubble);
+    const pending=document.createElement("div");
+    pending.className="assistant-message card";
+    pending.style.padding="12px";
+    pending.textContent="جارٍ التفكير...";
+    messages.appendChild(pending);
+    messages.scrollTop=messages.scrollHeight;
+    try{
+      const data=await api("/api/assistant/chat",{method:"POST",body:JSON.stringify({message:clean})});
+      pending.textContent=data.reply||"لم يصل رد.";
+    }catch(error){
+      pending.textContent=error.message;
+      pending.classList.add("error-box");
+    }finally{messages.scrollTop=messages.scrollHeight;}
+  };
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const input=form.elements.message;
+    const button=form.querySelector("button[type=submit]");
+    const value=input.value;
+    if(!value.trim())return;
+    input.value="";button.disabled=true;
+    try{await submit(value);}finally{button.disabled=false;input.focus();}
+  };
+}
+
 async function renderProfile(){
   const root=document.querySelector("#profileRoot");if(!root)return;
   const requested=new URLSearchParams(location.search).get("id");
@@ -708,6 +746,7 @@ async function mount(){
   else if(pageName==="activate") await renderActivate();
   else if(pageName==="create") await renderCreate();
   else if(pageName==="profile") await renderProfile();
+  else if(pageName==="assistant") await renderAssistant();
   else if(pageName==="online-hub") await renderOnlineHub();
   else if(pageName==="chat") await renderChat();
   else if(["admin","members","users","admins","logs"].includes(pageName)) renderAdmin();
