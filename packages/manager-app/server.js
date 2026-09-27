@@ -159,7 +159,8 @@ const proxyRoutes=[
   ["GET","/api/manager/reports","/api/admin/reports"],
   ["GET","/api/manager/private-chats","/api/chat/private-channels"],
   ["GET","/api/manager/settings","/api/app-settings"],
-  ["GET","/api/manager/content","/api/posts?section=community&limit=50"]
+  ["GET","/api/manager/content","/api/posts?section=community&limit=50"],
+  ["GET","/api/manager/database-summary","/api/owner/database-summary"]
 ];
 for(const [method,local,upstream] of proxyRoutes){
   app[method.toLowerCase()](local,managerAuth,async(req,res)=>{
@@ -169,6 +170,15 @@ for(const [method,local,upstream] of proxyRoutes){
     }catch(error){console.error(error);res.status(502).json({ok:false,message:error.message});}
   });
 }
+
+app.get("/api/manager/database/:table",managerAuth,async(req,res)=>{
+  try{
+    const table=String(req.params.table||"").replace(/[^a-z_]/g,"");
+    if(!/^(announcements|activities|schedules|posts|post_likes|post_comments|conversations|conversation_members|messages|notifications|user_notifications|friendships|registrations|registration_checks|polls|poll_votes|audit_logs|user_activity|activity_events|agent_actions|app_settings|users)$/.test(table))return res.status(404).json({ok:false,message:"This data view is not available."});
+    const {response,data}=await mainApi("/api/owner/database/"+encodeURIComponent(table)+"?limit=120",req,{});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
 
 app.patch("/api/manager/users/:id/status",managerAuth,async(req,res)=>{
   try{
