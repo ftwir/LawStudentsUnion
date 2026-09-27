@@ -1,232 +1,269 @@
-const express = require("express");
-const path = require("path");
-const crypto = require("crypto");
-const { GoogleGenAI } = require("@google/genai");
-const { Octokit } = require("@octokit/rest");
+const express=require("express");
+const path=require("path");
+const crypto=require("crypto");
+const {GoogleGenAI}=require("@google/genai");
+const {Octokit}=require("@octokit/rest");
 
-const app = express();
-const PORT = process.env.PORT || 10000;
-const STUDENT_API_URL = String(process.env.STUDENT_API_URL || "").replace(/\/$/, "");
-const GITHUB_REPO = process.env.GITHUB_REPO || "ftwir/LawStudentsUnion";
-const GITHUB_REF = process.env.GITHUB_REF || "main";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-const AGENT_CHANNEL_SECRET = process.env.AGENT_CHANNEL_SECRET || "";
-const MONITOR_AGENT_URL = String(process.env.MONITOR_AGENT_URL || "").replace(/\/$/, "");
+const app=express();
+const PORT=Number(process.env.PORT||10000);
+const STUDENT_API_URL=String(process.env.STUDENT_API_URL||"").replace(/\/$/,"");
+const GITHUB_REPO=String(process.env.GITHUB_REPO||"ftwir/LawStudentsUnion");
+const GITHUB_REF=String(process.env.GITHUB_REF||"main");
+const GEMINI_MODEL=String(process.env.GEMINI_MODEL||"gemini-2.5-flash");
+const AGENT_CHANNEL_SECRET=String(process.env.AGENT_CHANNEL_SECRET||"");
 
-app.use(express.json({ limit: "2mb" }));
-app.use((req, res, next) => {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    next();
+app.disable("x-powered-by");
+app.use(express.json({limit:"2mb"}));
+app.use((req,res,next)=>{
+  res.setHeader("Cache-Control","no-store");
+  res.setHeader("X-Frame-Options","DENY");
+  res.setHeader("Referrer-Policy","no-referrer");
+  next();
 });
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname,"public")));
 
-function safeEqual(a, b) {
-    if (typeof a !== "string" || typeof b !== "string") return false;
-    const aa = Buffer.from(a);
-    const bb = Buffer.from(b);
-    return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
+function safeEqual(a,b){
+  if(typeof a!=="string"||typeof b!=="string")return false;
+  const x=Buffer.from(a),y=Buffer.from(b);
+  return x.length===y.length&&crypto.timingSafeEqual(x,y);
 }
-
-function signPayload(body) {
-    return crypto.createHmac("sha256", AGENT_CHANNEL_SECRET).update(body).digest("hex");
+function signPayload(body){return AGENT_CHANNEL_SECRET?crypto.createHmac("sha256",AGENT_CHANNEL_SECRET).update(body).digest("hex"):"";}
+function verifyAgentRequest(req){
+  if(!AGENT_CHANNEL_SECRET)return false;
+  const raw=JSON.stringify(req.body||{});
+  return safeEqual(String(req.headers["x-agent-signature"]||""),signPayload(raw));
 }
-
-function verifyAgentRequest(req) {
-    if (!AGENT_CHANNEL_SECRET) return false;
-    const supplied = String(req.headers["x-agent-signature"] || "");
-    const raw = JSON.stringify(req.body || {});
-    return safeEqual(supplied, signPayload(raw));
-}
-
-async function verifyOwnerSession(req) {
-    const authorization = req.headers.authorization || "";
-    if (!authorization.startsWith("Bearer ") || !STUDENT_API_URL) return false;
-    const response = await fetch(STUDENT_API_URL + "/api/owner/status", {
-        headers: { Authorization: authorization, Accept: "application/json" }
-    });
+async function verifyOwnerSession(req){
+  const auth=req.headers.authorization||"";
+  if(!STUDENT_API_URL||!auth.startsWith("Bearer "))return false;
+  try{
+    const response=await fetch(STUDENT_API_URL+"/api/owner/status",{headers:{Authorization:auth,Accept:"application/json"}});
     return response.ok;
+  }catch{return false;}
+}
+async function managerAuth(req,res,next){
+  try{
+    if(await verifyOwnerSession(req))return next();
+    return res.status(401).json({ok:false,message:"Manager authentication requires a valid owner database session."});
+  }catch(error){
+    console.error("manager auth failed",error);
+    return res.status(401).json({ok:false,message:"Manager authentication required."});
+  }
+}
+async function mainApi(pathName,req,options={}){
+  if(!STUDENT_API_URL)throw new Error("STUDENT_API_URL is not configured");
+  const headers={Accept:"application/json",Authorization:req.headers.authorization||""};
+  if(options.body!==undefined)headers["Content-Type"]="application/json";
+  const response=await fetch(STUDENT_API_URL+pathName,{...options,headers});
+  const data=await response.json().catch(()=>({ok:false,message:"Main API returned invalid JSON."}));
+  return {response,data};
+}
+async function readGithubFile(filePath){
+  const token=process.env.GITHUB_TOKEN;
+  if(!token)throw new Error("GITHUB_TOKEN is not configured");
+  const [owner,repo]=GITHUB_REPO.split("/");
+  const octokit=new Octokit({auth:token});
+  const result=await octokit.rest.repos.getContent({owner,repo,path:filePath,ref:GITHUB_REF});
+  if(Array.isArray(result.data)||!result.data.content)throw new Error("GitHub target is not a readable file");
+  return {sha:result.data.sha,content:Buffer.from(result.data.content,result.data.encoding||"base64").toString("utf8")};
+}
+function parseAIJson(value){
+  const cleaned=String(value||"").replace(/^\s*\x60\x60\x60json\s*/i,"").replace(/\s*\x60\x60\x60\s*$/i,"").trim();
+  try{return JSON.parse(cleaned);}catch{}
+  const start=cleaned.indexOf("{"),end=cleaned.lastIndexOf("}");
+  if(start>=0&&end>start)return JSON.parse(cleaned.slice(start,end+1));
+  throw new Error("AI response was not valid JSON");
+}
+function allowedEditPath(filePath){
+  const file=String(filePath||"").replace(/\\/g,"/");
+  if(!file||file.startsWith(".")||file.includes(".."))return false;
+  return /^(app\.js|style\.css|index\.html|assistant\/index\.html|[a-z-]+\/index\.html|backend\/|packages\/manager-app\/|worker\/)/.test(file);
+}
+async function generateRepair({error,filePath,source,instruction}){
+  const key=process.env.GEMINI_API_KEY;
+  if(!key)throw new Error("GEMINI_API_KEY is not configured");
+  const ai=new GoogleGenAI({apiKey:key});
+  const prompt=[
+    "You are the controlled code repair agent for Law Students Union.",
+    "The owner requested a repair. Produce the smallest safe production repair.",
+    "Do not change unrelated behavior. Do not add credentials. Do not add dependencies unless absolutely required.",
+    "Return JSON only with diagnosis, root_cause, replacement_code, tests.",
+    "replacement_code must be the complete file content without markdown.",
+    "The change will be staged to a dedicated Git branch and pull request; never assume direct production access.",
+    "Repository: "+GITHUB_REPO,
+    "Base ref: "+GITHUB_REF,
+    "File: "+filePath,
+    "Owner instruction: "+String(instruction||"").slice(0,6000),
+    "Observed error: "+String(error||"").slice(0,12000),
+    "",
+    "CURRENT FILE:",
+    source.slice(0,100000)
+  ].join("\n");
+  const response=await ai.models.generateContent({model:GEMINI_MODEL,contents:prompt,config:{temperature:0.1}});
+  return parseAIJson(response.text);
+}
+async function stageRepair(filePath,replacement,sha,diagnosis){
+  if(!replacement||typeof replacement!=="string")throw new Error("AI returned no replacement code");
+  const ext=path.extname(filePath).toLowerCase();
+  if([".js",".mjs",".cjs"].includes(ext))new Function(replacement);
+  const token=process.env.GITHUB_TOKEN;
+  if(!token)throw new Error("GITHUB_TOKEN is not configured");
+  const [owner,repo]=GITHUB_REPO.split("/");
+  const octokit=new Octokit({auth:token});
+  const base=await octokit.rest.repos.getBranch({owner,repo,branch:GITHUB_REF});
+  const suffix=String(filePath).replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^-+|-+$/g,"");
+  const branchName="owner-ai/"+Date.now()+"-"+suffix;
+  await octokit.rest.git.createRef({owner,repo,ref:"refs/heads/"+branchName,sha:base.data.commit.sha});
+  const commit=await octokit.rest.repos.createOrUpdateFileContents({
+    owner,repo,path:filePath,message:"owner-ai repair: "+filePath,content:Buffer.from(replacement,"utf8").toString("base64"),sha,branch:branchName
+  });
+  const pull=await octokit.rest.pulls.create({
+    owner,repo,title:"Owner AI repair: "+filePath,head:branchName,base:GITHUB_REF,
+    body:"Controlled owner AI repair.\n\nDiagnosis: "+String(diagnosis||"").slice(0,5000)+"\n\nNo direct write to the production branch was performed."
+  });
+  return {branch:branchName,commitSha:commit.data.commit.sha,pullRequestNumber:pull.data.number,pullRequestUrl:pull.data.html_url};
 }
 
-async function managerAuth(req, res, next) {
-    try {
-        const passcode = process.env.OWNER_MASTER_PASSCODE;
-        const supplied = req.headers["x-owner-master-passcode"];
-        if (passcode && supplied && safeEqual(supplied, passcode)) return next();
-        if (await verifyOwnerSession(req)) return next();
-        return res.status(401).json({ ok: false, message: "Manager authentication required." });
-    } catch (error) {
-        console.error(error);
-        return res.status(401).json({ ok:false, message:"Manager authentication required." });
-    }
-}
-
-async function readGithubFile(filePath) {
-    const token = process.env.GITHUB_TOKEN;
-    if (!token) throw new Error("GITHUB_TOKEN is not configured");
-    const [owner, repo] = GITHUB_REPO.split("/");
-    if (!owner || !repo) throw new Error("Invalid GITHUB_REPO");
-    const octokit = new Octokit({ auth: token });
-    const result = await octokit.rest.repos.getContent({ owner, repo, path:filePath, ref:GITHUB_REF });
-    if (Array.isArray(result.data) || !result.data.content) throw new Error("GitHub path is not a file");
-    return {
-        sha: result.data.sha,
-        content: Buffer.from(result.data.content, result.data.encoding || "base64").toString("utf8")
-    };
-}
-
-function extractJson(text) {
-    const cleaned = String(text || "").replace(/^\s*\`\`\`json\s*/i, "").replace(/\s*\`\`\`\s*$/i, "").trim();
-    try { return JSON.parse(cleaned); } catch {}
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
-    throw new Error("Gemini did not return valid JSON");
-}
-
-async function executeGeminiRepair({ error, filePath, source, context }) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-
-    const ai = new GoogleGenAI({ apiKey });
-    const prompt = [
-        "You are the execution agent for the Law Students Union repository.",
-        "A monitoring agent detected a runtime error. Produce the smallest safe repair.",
-        "You are authorized to edit only the supplied file.",
-        "Preserve existing behavior. Do not invent credentials, secrets, dependencies, or unrelated refactors.",
-        "Return JSON only with: diagnosis, root_cause, replacement_code, tests.",
-        "replacement_code must be the COMPLETE replacement content of the supplied file, with no markdown fences.",
-        "",
-        "Repository: " + GITHUB_REPO,
-        "Branch: " + GITHUB_REF,
-        "File: " + filePath,
-        "Runtime error: " + String(error || "").slice(0, 12000),
-        "Monitor context: " + JSON.stringify(context || {}).slice(0, 12000),
-        "",
-        "CURRENT FILE:",
-        source.slice(0, 80000)
-    ].join("\n");
-
-    const response = await ai.models.generateContent({ model: GEMINI_MODEL, contents: prompt });
-    return extractJson(response.text);
-}
-
-async function commitGithubFile(filePath, source, replacement, sha, message) {
-    if (!replacement || typeof replacement !== "string") throw new Error("Gemini returned no replacement code");
-    const ext = path.extname(filePath).toLowerCase();
-    if ([".js",".mjs",".cjs"].includes(ext)) {
-        new Function(replacement);
-    }
-    const token = process.env.GITHUB_TOKEN;
-    if (!token) throw new Error("GITHUB_TOKEN is not configured");
-    const [owner, repo] = GITHUB_REPO.split("/");
-    if (!owner || !repo) throw new Error("Invalid GITHUB_REPO");
-    const octokit = new Octokit({ auth: token });
-    const baseBranch = String(GITHUB_REF).replace(/^refs\/heads\//, "");
-    const branchName = "ai-repair/" + Date.now() + "-" +
-        String(filePath).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
-    const base = await octokit.rest.repos.getBranch({ owner, repo, branch: baseBranch });
-    await octokit.rest.git.createRef({
-        owner, repo, ref: "refs/heads/" + branchName, sha: base.data.commit.sha
-    });
-    const result = await octokit.rest.repos.createOrUpdateFileContents({
-        owner, repo, path:filePath, message,
-        content:Buffer.from(replacement,"utf8").toString("base64"),
-        sha, branch:branchName
-    });
-    const pull = await octokit.rest.pulls.create({
-        owner, repo, title:"AI repair: " + filePath, head:branchName, base:baseBranch,
-        body:"Automated repair proposed by the self-healing execution agent.\n\nFile: " + filePath + "\nThe repair was staged on a dedicated branch and requires review before entering the base branch."
-    });
-    return {
-        commitSha:result.data.commit.sha,
-        branch:branchName,
-        pullRequestNumber:pull.data.number,
-        pullRequestUrl:pull.data.html_url
-    };
-}
-// Shared owner identity: the ACM never stores a second owner password.
-// /api/manager/login always delegates authentication to the main API.
-app.post("/api/manager/login", async (req, res) => {
-    try {
-        if (!STUDENT_API_URL) return res.status(503).json({ok:false,message:"STUDENT_API_URL is not configured."});
-        const identifier = String(req.body?.identifier || "").trim();
-        const password = String(req.body?.password || "");
-        if (!identifier || !password) return res.status(400).json({ok:false,message:"Identifier and password are required."});
-
-        const response = await fetch(STUDENT_API_URL + "/api/auth/login", {
-            method:"POST", headers:{"Content-Type":"application/json","Accept":"application/json"},
-            body:JSON.stringify({identifier,password})
-        });
-        const data = await response.json().catch(()=>({ok:false,message:"Student API returned an invalid response."}));
-        if (!response.ok || !data.ok || !data.token) return res.status(response.status || 401).json({ok:false,message:data.message || "Invalid login credentials."});
-        if (data.user?.role !== "owner") return res.status(403).json({ok:false,message:"This account is not an owner account."});
-
-        res.json({ok:true,token:data.token,user:{id:data.user.id,full_name:data.user.full_name,role:data.user.role}});
-    } catch(error) {
-        console.error(error);
-        res.status(502).json({ok:false,message:"Could not reach Student API."});
-    }
+app.post("/api/manager/login",async(req,res)=>{
+  try{
+    const identifier=String(req.body?.identifier||"").trim();
+    const password=String(req.body?.password||"");
+    if(!identifier||!password)return res.status(400).json({ok:false,message:"Identifier and password are required."});
+    const result=await fetch(STUDENT_API_URL+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify({identifier,password})});
+    const data=await result.json().catch(()=>({ok:false,message:"Invalid main API response."}));
+    if(!result.ok||!data.ok||!data.token)return res.status(result.status||401).json({ok:false,message:data.message||"Invalid credentials."});
+    if(data.user?.role!=="owner")return res.status(403).json({ok:false,message:"Only the owner account can enter the manager."});
+    res.json({ok:true,token:data.token,user:{id:data.user.id,full_name:data.user.full_name,role:data.user.role}});
+  }catch(error){
+    console.error(error);
+    res.status(502).json({ok:false,message:"Could not reach the main API."});
+  }
 });
 
-app.get("/health", (req, res) => res.json({
-    ok:true, service:"ACM Manager", sharedAuth:Boolean(STUDENT_API_URL),
-    geminiConfigured:Boolean(process.env.GEMINI_API_KEY),
-    githubConfigured:Boolean(process.env.GITHUB_TOKEN),
-    monitorChannelConfigured:Boolean(AGENT_CHANNEL_SECRET && MONITOR_AGENT_URL),
-    timestamp:new Date().toISOString()
+app.get("/health",(req,res)=>res.json({ok:true,service:"Law Students Union Owner Manager",authentication:"database-owner-session",ai:Boolean(process.env.GEMINI_API_KEY),github:Boolean(process.env.GITHUB_TOKEN),timestamp:new Date().toISOString()}));
+
+app.get("/api/manager/overview",managerAuth,async(req,res)=>{
+  try{
+    const paths=["/api/owner/status","/api/assistant/status","/api/owner/activity","/api/owner/audit"];
+    const results=await Promise.all(paths.map(p=>mainApi(p,req)));
+    const failed=results.find(x=>!x.response.ok);
+    if(failed)return res.status(failed.response.status).json(failed.data);
+    res.json({ok:true,status:results[0].data,assistant:results[1].data,activity:results[2].data,audit:results[3].data});
+  }catch(error){console.error(error);res.status(502).json({ok:false,message:error.message});}
+});
+
+const proxyRoutes=[
+  ["GET","/api/manager/users","/api/owner/users"],
+  ["GET","/api/manager/activity","/api/owner/activity"],
+  ["GET","/api/manager/registrations","/api/admin/registrations"],
+  ["GET","/api/manager/reports","/api/admin/reports"],
+  ["GET","/api/manager/private-chats","/api/chat/private-channels"],
+  ["GET","/api/manager/settings","/api/app-settings"],
+  ["GET","/api/manager/content","/api/posts?section=community&limit=50"]
+];
+for(const [method,local,upstream] of proxyRoutes){
+  app[method.toLowerCase()](local,managerAuth,async(req,res)=>{
+    try{
+      const {response,data}=await mainApi(upstream,req,{});
+      res.status(response.status).json(data);
+    }catch(error){console.error(error);res.status(502).json({ok:false,message:error.message});}
+  });
+}
+
+app.patch("/api/manager/users/:id/status",managerAuth,async(req,res)=>{
+  try{
+    const {response,data}=await mainApi("/api/admin/users/"+encodeURIComponent(req.params.id)+"/status",req,{method:"PATCH",body:JSON.stringify({is_active:req.body?.is_active===true})});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.patch("/api/manager/users/:id/role",managerAuth,async(req,res)=>{
+  try{
+    const {response,data}=await mainApi("/api/owner/users/"+encodeURIComponent(req.params.id)+"/role",req,{method:"PATCH",body:JSON.stringify({role:req.body?.role})});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.patch("/api/manager/registrations/:id",managerAuth,async(req,res)=>{
+  try{
+    const {response,data}=await mainApi("/api/admin/registrations/"+encodeURIComponent(req.params.id),req,{method:"PATCH",body:JSON.stringify({status:req.body?.status,rejection_reason:req.body?.rejection_reason||null})});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.delete("/api/manager/registrations/:id",managerAuth,async(req,res)=>{
+  try{
+    const {response,data}=await mainApi("/api/admin/registrations/"+encodeURIComponent(req.params.id),req,{method:"DELETE"});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.patch("/api/manager/reports/:id",managerAuth,async(req,res)=>{
+  try{
+    const {response,data}=await mainApi("/api/admin/reports/"+encodeURIComponent(req.params.id),req,{method:"PATCH",body:JSON.stringify({status:req.body?.status})});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.patch("/api/manager/posts/:id/pin",managerAuth,async(req,res)=>{
+  try{
+    const {response,data}=await mainApi("/api/posts/"+encodeURIComponent(req.params.id)+"/pin",req,{method:"PATCH",body:JSON.stringify({pinned:req.body?.pinned===true})});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.patch("/api/manager/settings",managerAuth,async(req,res)=>{
+  try{
+    const body=req.body&&typeof req.body==="object"?req.body:{};
+    const clean={};
+    for(const [key,value] of Object.entries(body))if(/^[a-zA-Z0-9_.-]{1,120}$/.test(key))clean[key]=value;
+    const {response,data}=await mainApi("/api/app-settings",req,{method:"PUT",body:JSON.stringify(clean)});
+    res.status(response.status).json(data);
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+
+app.post("/api/manager/ai/repair",managerAuth,async(req,res)=>{
+  const filePath=String(req.body?.filePath||"");
+  if(!allowedEditPath(filePath))return res.status(400).json({ok:false,message:"That file is outside the controlled application tree."});
+  try{
+    const current=await readGithubFile(filePath);
+    const analysis=await generateRepair({error:req.body?.error||"",filePath,source:current.content,instruction:req.body?.instruction||""});
+    const staged=await stageRepair(filePath,analysis.replacement_code,current.sha,analysis.root_cause||analysis.diagnosis||"Owner requested repair.");
+    const action=await mainApi("/api/owner/agent-actions",req,{method:"POST",body:JSON.stringify({
+      action_type:"owner_ai_repair",
+      target_type:"file",
+      details:{filePath,branch:staged.branch,pullRequestUrl:staged.pullRequestUrl,rootCause:analysis.root_cause||null}
+    })});
+    res.json({ok:true,analysis,staged,action:action.data});
+  }catch(error){
+    console.error("owner AI repair failed",error);
+    res.status(502).json({ok:false,message:error.message});
+  }
+});
+
+app.post("/internal/agent/execute",async(req,res)=>{
+  if(!verifyAgentRequest(req))return res.status(401).json({ok:false,message:"Invalid agent signature."});
+  const filePath=String(req.body?.filePath||"");
+  if(!allowedEditPath(filePath))return res.status(400).json({ok:false,message:"File path is outside the controlled application tree."});
+  try{
+    const current=await readGithubFile(filePath);
+    const analysis=await generateRepair({error:req.body?.error||"",filePath,source:current.content,instruction:"Automated self-healing request."});
+    const staged=await stageRepair(filePath,analysis.replacement_code,current.sha,analysis.root_cause||"Automated repair");
+    res.json({ok:true,analysis,staged});
+  }catch(error){console.error("internal repair failed",error);res.status(502).json({ok:false,message:error.message});}
+});
+
+app.get("/api/manager/github",managerAuth,async(req,res)=>{
+  try{
+    const token=process.env.GITHUB_TOKEN;if(!token)return res.status(503).json({ok:false,message:"GITHUB_TOKEN is not configured."});
+    const [owner,repo]=GITHUB_REPO.split("/");
+    const octokit=new Octokit({auth:token});
+    const response=await octokit.rest.repos.getBranch({owner,repo,branch:GITHUB_REF});
+    res.json({ok:true,repository:GITHUB_REPO,ref:GITHUB_REF,commit:{sha:response.data.commit.sha}});
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+
+app.get("/api/manager/config",managerAuth,(req,res)=>res.json({
+  ok:true,repository:GITHUB_REPO,ref:GITHUB_REF,
+  mainApiConfigured:Boolean(STUDENT_API_URL),githubConfigured:Boolean(process.env.GITHUB_TOKEN),
+  geminiConfigured:Boolean(process.env.GEMINI_API_KEY)
 }));
 
-// Hidden, HMAC-authenticated monitor -> Gemini execution channel.
-app.post("/internal/agent/execute", async (req, res) => {
-    if (!verifyAgentRequest(req)) return res.status(401).json({ok:false,message:"Invalid agent signature."});
-    const { error, filePath, context } = req.body || {};
-    if (!error || !filePath) return res.status(400).json({ok:false,message:"error and filePath are required"});
-    if (!/^(backend|public|packages\/manager-app)\//.test(filePath)) {
-        return res.status(400).json({ok:false,message:"filePath is outside the allowed application tree"});
-    }
-    try {
-        const current = await readGithubFile(filePath);
-        const analysis = await executeGeminiRepair({error,filePath,source:current.content,context});
-        const commitSha = await commitGithubFile(
-            filePath, current.content, analysis.replacement_code, current.sha,
-            "AI repair: " + filePath
-        );
-        console.log(JSON.stringify({type:"gemini-repair",filePath,commitSha:commitSha.commitSha||null,branch:commitSha.branch||null,pullRequestNumber:commitSha.pullRequestNumber||null,pullRequestUrl:commitSha.pullRequestUrl||null,rootCause:analysis.root_cause}));
-        res.json({ok:true,provider:"gemini",model:GEMINI_MODEL,filePath,staged:commitSha,analysis});
-    } catch (error) {
-        console.error("Gemini executor failed:", error);
-        res.status(502).json({ok:false,message:error.message});
-    }
-});
-
-app.get("/api/manager/github", managerAuth, async (req, res) => {
-    try {
-        const token = process.env.GITHUB_TOKEN;
-        if (!token) return res.status(503).json({ ok:false, message:"GITHUB_TOKEN is not configured." });
-        const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits/${encodeURIComponent(GITHUB_REF)}`, {
-            headers:{Accept:"application/vnd.github+json",Authorization:`Bearer ${token}`,"X-GitHub-Api-Version":"2022-11-28"}
-        });
-        const data = await response.json();
-        if (!response.ok) return res.status(response.status).json({ok:false,message:data.message || "GitHub request failed."});
-        res.json({ok:true,repository:GITHUB_REPO,ref:GITHUB_REF,commit:{sha:data.sha,message:data.commit?.message,date:data.commit?.committer?.date}});
-    } catch (error) { console.error(error); res.status(500).json({ok:false,message:"Could not reach GitHub."}); }
-});
-
-app.get("/api/manager/owner-status", managerAuth, async (req, res) => {
-    if (!STUDENT_API_URL) return res.status(503).json({ok:false,message:"STUDENT_API_URL is not configured."});
-    try {
-        const response = await fetch(`${STUDENT_API_URL}/api/owner/status`, {headers:{Authorization:req.headers.authorization || "",Accept:"application/json"}});
-        const data = await response.json();
-        res.status(response.status).json(data);
-    } catch (error) { console.error(error); res.status(502).json({ok:false,message:"Could not reach Student API owner endpoint."}); }
-});
-
-app.get("/api/manager/config", managerAuth, (req, res) => res.json({
-    ok:true,repository:GITHUB_REPO,ref:GITHUB_REF,studentApiConfigured:Boolean(STUDENT_API_URL),
-    githubConfigured:Boolean(process.env.GITHUB_TOKEN),aiProvider:"gemini",
-    aiConfigured:Boolean(process.env.GEMINI_API_KEY),monitorChannelConfigured:Boolean(AGENT_CHANNEL_SECRET && MONITOR_AGENT_URL)
-}));
-
-app.get("*", (req,res) => res.sendFile(path.join(__dirname,"public","index.html")));
-app.listen(PORT, "0.0.0.0", () => console.log(`ACM Manager running on port ${PORT}`));
+app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
+const server=app.listen(PORT,"0.0.0.0",()=>console.log("Owner Manager running on "+PORT));
+function shutdown(){server.close(()=>process.exit(0));}
+process.once("SIGTERM",shutdown);process.once("SIGINT",shutdown);
