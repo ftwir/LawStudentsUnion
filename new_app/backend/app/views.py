@@ -211,6 +211,8 @@ class MembershipRequestViewSet(viewsets.ModelViewSet):
         return [IsAdminOrAgent()]
 
     def perform_update(self, serializer):
+        if not self.request.user.is_agent() and not getattr(getattr(self.request.user, 'permissions', None), 'can_approve_membership', False):
+            raise PermissionDenied('Membership approval permission is disabled for this Administrator.')
         instance = serializer.save(reviewed_by=self.request.user)
         if instance.status == MembershipRequest.Status.APPROVED:
             User.objects.filter(email=instance.applicant_email).update(is_verified_student=True)
