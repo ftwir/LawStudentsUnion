@@ -1,11 +1,13 @@
 name: law_union_client
 description: Law Faculty Student Union student and community client.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+2
 environment:
   sdk: '>=3.3.0 <4.0.0'
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   dio: ^5.7.0
   flutter_secure_storage: ^9.2.2
