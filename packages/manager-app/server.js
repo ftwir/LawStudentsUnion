@@ -226,6 +226,37 @@ app.get("/api/manager/database/:table",managerAuth,async(req,res)=>{
   }catch(error){res.status(502).json({ok:false,message:error.message});}
 });
 
+app.get("/api/manager/users",managerAuth,async(req,res)=>{
+  try{const {response,data}=await mainApi("/api/owner/users",req);res.status(response.status).json(data);}
+  catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.get("/api/manager/registrations",managerAuth,async(req,res)=>{
+  try{const {response,data}=await mainApi("/api/admin/registrations",req);res.status(response.status).json(data);}
+  catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.get("/api/manager/reports",managerAuth,async(req,res)=>{
+  try{const {response,data}=await mainApi("/api/admin/reports",req);res.status(response.status).json(data);}
+  catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.get("/api/manager/content",managerAuth,async(req,res)=>{
+  try{
+    const [posts,ann,acts]=await Promise.all([
+      mainApi("/api/posts?section=community&limit=50",req),
+      mainApi("/api/announcements",req),
+      mainApi("/api/activities",req)
+    ]);
+    const items=[
+      ...(posts.data?.items||[]).map(x=>({...x,content_type:"post"})),
+      ...(ann.data?.items||[]).map(x=>({...x,content_type:"announcement"})),
+      ...(acts.data?.items||[]).map(x=>({...x,content_type:"activity"}))
+    ].sort((a,b)=>new Date(b.created_at||b.event_date||0)-new Date(a.created_at||a.event_date||0));
+    res.json({ok:true,items});
+  }catch(error){res.status(502).json({ok:false,message:error.message});}
+});
+app.get("/api/manager/settings",managerAuth,async(req,res)=>{
+  try{const {response,data}=await mainApi("/api/app-settings",req);res.status(response.status).json(data);}
+  catch(error){res.status(502).json({ok:false,message:error.message});}
+});
 app.patch("/api/manager/users/:id/status",managerAuth,async(req,res)=>{
   try{
     const {response,data}=await mainApi("/api/admin/users/"+encodeURIComponent(req.params.id)+"/status",req,{method:"PATCH",body:JSON.stringify({is_active:req.body?.is_active===true})});
