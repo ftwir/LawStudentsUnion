@@ -469,14 +469,43 @@ function renderAdmin(){
 
 async function renderApplications(){
   if(!isManager()){go("/");return;}
-  const root=document.querySelector("#applicationsRoot");if(!root)return;
+  const root=document.querySelector("#applicationsRoot");
+  if(!root)return;
   try{
     const data=await api("/api/admin/registrations");
     const rows=data.applications||[];
-    root.innerHTML=sectionHeader("طلبات العضوية","الفحص الآلي والمراجعة الإدارية")+"<div class=\"stack\">"+(rows.length?rows.map(a=>'<article class="card application-row"><div><strong>'+esc(a.full_name)+'</strong><p>'+esc(a.student_id)+' · '+esc(a.academic_year||"")+' · '+esc(a.phone||"")+'</p><small>'+esc(a.note||"")+'</small></div><div class="application-actions"><span class="tag">'+esc(a.status)+'</span><select data-application="'+a.id+'"><option value="pending" '+(a.status==="pending"?"selected":"")+'>قيد المراجعة</option><option value="approved" '+(a.status==="approved"?"selected":"")+'>مقبول</option><option value="rejected" '+(a.status==="rejected"?"selected":"")+'>مرفوض</option></select>'+(role()==="owner"?'<button type="button" class="btn secondary" data-delete-application="'+a.id+'">حذف</button>':"")+'</div></article>').join(""):empty("لا توجد طلبات.")+"</div>";
-    root.querySelectorAll("[data-application]").forEach(s=>s.onchange=async()=>{try{await api("/api/admin/registrations/"+s.dataset.application,{method:"PATCH",body:JSON.stringify({status:s.value,rejection_reason:s.value==="rejected"?prompt("سبب الرفض:")||null:null})});renderApplications();}catch(e){notify(e.message,"error");}});
-    root.querySelectorAll("[data-delete-application]").forEach(b=>b.onclick=async()=>{if(confirm("حذف الطلب؟")){try{await api("/api/admin/registrations/"+b.dataset.deleteApplication,{method:"DELETE"});renderApplications();}catch(e){notify(e.message,"error");}}});
-  }catch(error){root.innerHTML='<div class="empty error-box"><strong>تعذر تحميل الطلبات</strong><span>'+esc(error.message)+'</span></div>';}
+    const markup=rows.map(a=>{
+      const actions='<span class="tag">'+esc(a.status)+'</span>'+
+        '<select data-application="'+a.id+'">'+
+        '<option value="pending" '+(a.status==="pending"?"selected":"")+'>قيد المراجعة</option>'+
+        '<option value="approved" '+(a.status==="approved"?"selected":"")+'>مقبول</option>'+
+        '<option value="rejected" '+(a.status==="rejected"?"selected":"")+'>مرفوض</option>'+
+        '</select>'+
+        (role()==="owner"?'<button type="button" class="btn secondary" data-delete-application="'+a.id+'">حذف</button>':"");
+      return '<article class="card application-row"><div><strong>'+esc(a.full_name)+'</strong><p>'+esc(a.student_id)+' · '+esc(a.academic_year||"")+' · '+esc(a.phone||"")+'</p><small>'+esc(a.note||"")+'</small></div><div>'+actions+'</div></article>';
+    }).join("");
+    root.innerHTML=sectionHeader("طلبات العضوية","الفحص الآلي والمراجعة الإدارية")+'<div class="stack">'+(markup||empty("لا توجد طلبات."))+'</div>';
+    root.querySelectorAll("[data-application]").forEach(select=>{
+      select.onchange=async()=>{
+        try{
+          const rejectionReason=select.value==="rejected" ? (prompt("سبب الرفض:")||null) : null;
+          await api("/api/admin/registrations/"+select.dataset.application,{method:"PATCH",body:JSON.stringify({status:select.value,rejection_reason:rejectionReason})});
+          await renderApplications();
+        }catch(error){notify(error.message,"error");}
+      };
+    });
+    root.querySelectorAll("[data-delete-application]").forEach(button=>{
+      button.onclick=async()=>{
+        if(!confirm("حذف طلب العضوية؟"))return;
+        try{
+          await api("/api/admin/registrations/"+button.dataset.deleteApplication,{method:"DELETE"});
+          await renderApplications();
+        }catch(error){notify(error.message,"error");}
+      };
+    });
+  }catch(error){
+    root.innerHTML='<div class="empty error-box"><strong>تعذر تحميل الطلبات</strong><span>'+esc(error.message)+'</span></div>';
+  }
 }
 
 async function renderReports(){
