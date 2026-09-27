@@ -34,6 +34,17 @@ class AdminApi {
   Future<List> hubs() async => (await dio.get('/api/subhubs/')).data;
   Future<void> createHub(String name, String description, String iconUrl) async => await dio.post('/api/subhubs/', data: {'name': name, 'description': description, 'icon_url': iconUrl});
   Future<List> audit() async => (await dio.get('/api/admin/audit-log/')).data;
+  Future<Map<String, dynamic>> bootstrapMfa(String token, String username, String password) async {
+    final r = await dio.post('/api/auth/mfa/bootstrap/', data: {
+      'bootstrap_token': token, 'username': username, 'password': password,
+    });
+    return Map<String, dynamic>.from(r.data as Map);
+  }
+  Future<void> bootstrapConfirm(String token, String code) async {
+    await dio.post('/api/auth/mfa/bootstrap/confirm/', data: {
+      'bootstrap_token': token, 'otp_token': code,
+    });
+  }
   Future<String> mfaSetup() async => (await dio.post('/api/auth/mfa/setup/')).data['otpauth_url'];
   Future<void> mfaConfirm(String code) async => await dio.post('/api/auth/mfa/confirm/', data: {'otp_token': code});
 }
