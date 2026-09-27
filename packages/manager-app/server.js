@@ -163,11 +163,11 @@ app.post("/api/manager/logout",(req,res)=>{clearManagerCookie(res);res.json({ok:
 
 app.get("/api/manager/overview",managerAuth,async(req,res)=>{
   try{
-    const paths=["/api/owner/status","/api/assistant/status","/api/owner/activity","/api/owner/audit"];
+    const paths=["/api/owner/status","/api/assistant/status","/api/owner/activity","/api/owner/audit","/api/owner/database-summary"];
     const results=await Promise.all(paths.map(p=>mainApi(p,req)));
     const failed=results.find(x=>!x.response.ok);
     if(failed)return res.status(failed.response.status).json(failed.data);
-    res.json({ok:true,status:results[0].data,assistant:results[1].data,activity:results[2].data,audit:results[3].data});
+    res.json({ok:true,status:results[0].data,assistant:results[1].data,activity:results[2].data,audit:results[3].data,database:results[4].data});
   }catch(error){console.error(error);res.status(502).json({ok:false,message:error.message});}
 });
 
@@ -176,6 +176,7 @@ const proxyRoutes=[
   ["GET","/api/manager/activity","/api/owner/activity"],
   ["GET","/api/manager/registrations","/api/admin/registrations"],
   ["GET","/api/manager/reports","/api/admin/reports"],
+  ["GET","/api/manager/chats","/api/admin/chats"],
   ["GET","/api/manager/private-chats","/api/chat/private-channels"],
   ["GET","/api/manager/settings","/api/app-settings"],
   ["GET","/api/manager/content","/api/posts?section=community&limit=50"],
