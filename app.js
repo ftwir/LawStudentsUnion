@@ -329,15 +329,49 @@ async function renderCreate(){
   const renderType=type=>{
     tabs.forEach(x=>x.classList.toggle("active",x.dataset.createType===type));
     if(type==="poll"){
-      box.innerHTML='<form class="form" id="pollForm"><label>السؤال<textarea name="question" required></textarea></label><div id="pollOptions"><input name="option" required placeholder="الخيار 1"><input name="option" required placeholder="الخيار 2"></div><button type="button" class="btn secondary" id="addOption">+ إضافة خيار</button><label>الهاشتاقات<input name="hashtags"></label><button class="btn" type="submit">نشر الاستفتاء</button><div class="form-status"></div></form>';
-      document.querySelector("#addOption").onclick=()=>{const wrap=document.querySelector("#pollOptions");if(wrap.children.length<8){const i=document.createElement("input");i.name="option";i.placeholder="خيار جديد";wrap.appendChild(i);}};
-      document.querySelector("#pollForm").onsubmit=async e=>{
-        e.preventDefault();const form=e.currentTarget,btn=form.querySelector("button[type=submit]"),status=form.querySelector(".form-status");
-        const fd=new FormData(form);const options=fd.getAll("option").map(x=>String(x).trim()).filter(Boolean);
-        btn.disabled=true;
-        try{await api("/api/polls",{method:"POST",body:JSON.stringify({question:fd.get("question"),options,hashtags:String(fd.get("hashtags")||"").split(/[,\s]+/).filter(Boolean),duration_minutes:1440,allow_vote_change:true,anonymous:false,results_visibility:"after_vote"})});notify("تم نشر الاستفتاء.","success");go("/");}
-        catch(err){status.textContent=err.message;btn.disabled=false;}
+      if(type==="chat"){
+      box.innerHTML='<form class="form" id="chatCreateForm"><label>نوع الدردشة<select name="type"><option value="direct">دردشة خاصة</option><option value="group">مجموعة</option></select></label><label>اسم الدردشة<input name="name" maxlength="150" placeholder="اسم المجموعة"></label><label>الوصف<textarea name="description" maxlength="1000"></textarea></label><label>البحث عن أعضاء<input id="chatMemberSearch" autocomplete="off" placeholder="ابحث بالاسم أو رقم القيد"></label><div id="chatMemberList" class="stack"><div class="loading">جارٍ تحميل الأعضاء...</div></div><div id="selectedMembers" class="muted"></div><button class="btn" type="submit">إنشاء الدردشة</button><div class="form-status"></div></form>';
+      const form=document.querySelector("#chatCreateForm");
+      const search=document.querySelector("#chatMemberSearch");
+      const list=document.querySelector("#chatMemberList");
+      const selectedEl=document.querySelector("#selectedMembers");
+      const selected=new Map();
+      const loadMembers=async()=>{
+        try{
+          const data=await api("/api/chat/users?q="+encodeURIComponent(search.value.trim()));
+          list.innerHTML=(data.users||[]).map(u=>'<label class="card" style="display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer"><input type="checkbox" data-chat-user="'+u.id+'"><span class="avatar">'+(u.avatar_url?'<img src="'+esc(u.avatar_url)+'" alt="">':"👤")+'</span><span><strong>'+esc(u.full_name)+'</strong><small style="display:block;color:var(--muted)">'+esc(u.student_id||"")+'</small></span></label>').join("")||empty("لا يوجد أعضاء مطابقون.");
+          list.querySelectorAll("[data-chat-user]").forEach(input=>{
+            input.checked=selected.has(Number(input.dataset.chatUser));
+            input.onchange=()=>{
+              const id=Number(input.dataset.chatUser);
+              const row=input.closest("label");
+              const name=row?.querySelector("strong")?.textContent||"عضو";
+              if(form.type.value==="direct"&&input.checked){
+                list.querySelectorAll("[data-chat-user]").forEach(other=>{
+                  if(other!==input){other.checked=false;selected.delete(Number(other.dataset.chatUser));}
+                });
+              }
+              if(input.checked)selected.set(id,name);else selected.delete(id);
+              selectedEl.textContent=selected.size?"الأعضاء المحددون: "+Array.from(selected.values()).join("، "):"لم يتم اختيار أعضاء.";
+            };
+          });
+        }catch(error){list.innerHTML='<div class="empty error-box">'+esc(error.message)+'</div>';}
       };
+      search.addEventListener("input",debounce(loadMembers,250));
+      form.type.addEventListener("change",loadMembers);
+      form.onsubmit=async e=>{
+        e.preventDefault();
+        const btn=form.querySelector("button[type=submit]");
+        const status=form.querySelector(".form-status");
+        const memberIds=Array.from(selected.keys());
+        if((form.type.value==="direct"&&memberIds.length!==1)||(form.type.value==="group"&&memberIds.length<1)){status.textContent="اختر الأعضاء أولاً.";return;}
+        btn.disabled=true;
+        try{
+          const data=await api("/api/chat/conversations",{method:"POST",body:JSON.stringify({type:form.type.value,name:form.name.value.trim(),description:form.description.value.trim(),member_ids:memberIds})});
+          go("/chat/?id="+encodeURIComponent(data.conversation.id));
+        }catch(error){status.textContent=error.message;btn.disabled=false;}
+      };
+      await loadMembers();
       return;
     }
     box.innerHTML='<form class="form" id="postForm"><label>المساحة<select name="section"><option value="community">مجتمع الطلبة</option><option value="activities">الأنشطة والفعاليات</option><option value="study">الدراسة</option></select></label><label>العنوان<input name="title" maxlength="255"></label><label>المحتوى<textarea name="body" rows="9" maxlength="10000" required></textarea></label><label>الهاشتاقات<input name="hashtags" placeholder="#قانون #دراسة"></label><label class="file-picker">إضافة صورة<input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif"></label><div id="uploadStatus"></div><button class="btn" type="submit">'+(type==="article"?"نشر المقال":"نشر المنشور")+'</button><div class="form-status"></div></form>';
