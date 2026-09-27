@@ -1,4 +1,15 @@
 import 'package:flutter/material.dart';
-class AdminLanguageController extends ValueNotifier<Locale>{AdminLanguageController():super(const Locale('en'));void toggle()=>value=Locale(value.languageCode=='en'?'ar':'en');bool get ar=>value.languageCode=='ar';}
-class AdminLanguageScope extends InheritedNotifier<AdminLanguageController>{const AdminLanguageScope({super.key,required AdminLanguageController controller,required super.child}):super(notifier:controller);static AdminLanguageController of(BuildContext c)=>c.dependOnInheritedWidgetOfExactType<AdminLanguageScope>()!.notifier!;}
-class AdminL10n{static const en={'title':'Union Admin Command Center','users':'Users','permissions':'Permissions','hubs':'Hubs','audit':'Audit','mfa':'MFA','applications':'Applications','userList':'Users','language':'العربية','username':'Username','password':'Password','signIn':'Sign in','signing':'Signing in…','agentLocked':'AGENT · LOCKED','member':'MEMBER','admin':'ADMIN','languageEnglish':'English','enroll':'First-time Agent MFA enrollment','role':'Role'};static const ar={'title':'مركز إدارة اتحاد الطلبة','users':'الأعضاء','permissions':'الصلاحيات','hubs':'المجتمعات','audit':'السجل','mfa':'MFA','applications':'طلبات العضوية','userList':'المستخدمون','language':'English','username':'اسم المستخدم','password':'كلمة المرور','signIn':'تسجيل الدخول','signing':'جارٍ الدخول…','agentLocked':'AGENT · مقفل','member':'عضو','admin':'مدير','languageEnglish':'English','enroll':'إعداد MFA الأولي للوكيل','role':'الرتبة'};static String t(BuildContext c,String k)=>(AdminLanguageScope.of(c).ar?ar:en)[k]??k;}
+class AdminLanguageController extends ValueNotifier<Locale> {
+  AdminLanguageController() : super(const Locale('en'));
+  void toggle() => value = Locale(value.languageCode == 'en' ? 'ar' : 'en');
+  bool get ar => value.languageCode == 'ar';
+}
+class AdminLanguageScope extends InheritedNotifier<AdminLanguageController> {
+  const AdminLanguageScope({super.key, required AdminLanguageController controller, required super.child}) : super(notifier: controller);
+  static AdminLanguageController of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<AdminLanguageScope>()!.notifier!;
+}
+class AdminL10n {
+  static const en = {'title':'Union Admin Command Center','subtitle':'Agent / Administrator sign in','users':'Users','permissions':'Permissions','hubs':'Hubs','audit':'Audit','mfa':'MFA','username':'Username','password':'Password','signIn':'Sign in','signing':'Signing in…','language':'العربية','serverError':'Unable to contact the server. Check your connection and try again.'};
+  static const ar = {'title':'مركز إدارة اتحاد الطلبة','subtitle':'تسجيل دخول الوكيل / المدير','users':'الأعضاء','permissions':'الصلاحيات','hubs':'المجتمعات','audit':'السجل','mfa':'MFA','username':'اسم المستخدم','password':'كلمة المرور','signIn':'تسجيل الدخول','signing':'جارٍ الدخول…','language':'English','serverError':'تعذر الاتصال بالخادم. تحقق من الاتصال وحاول مرة أخرى.'};
+  static String t(BuildContext c, String k) => (AdminLanguageScope.of(c).ar ? ar : en)[k] ?? k;
+}
