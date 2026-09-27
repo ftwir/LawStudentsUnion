@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: lsu-main
+    runtime: node
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: node backend/server.js
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - backend/**
+        - public/**
+        - render.yaml
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lsu-postgres
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: APP_DEVICE_SALT
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_ASSISTANT_MODEL
+        value: gemini-2.5-flash
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "240"
+      - key: DB_POOL_MAX
+        value: "20"
+
+  - type: web
+    name: lsu-owner-manager
+    runtime: node
+    plan: free
+    rootDir: packages/manager-app
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - packages/manager-app/**
+        - render.yaml
+    envVars:
+      - key: MAIN_API_URL
+        value: https://lawstudentsunion.onrender.com
+      - key: GITHUB_REPO
+        value: ftwir/LawStudentsUnion
+      - key: GITHUB_REF
+        value: main
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+
+databases:
+  - name: lsu-postgres
+    plan: free

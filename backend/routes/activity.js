@@ -1,93 +1,10 @@
-module.exports = function registerActivityRoutes(app, pool, requireAuth, requireRoles) {
-  const allowedPages = new Set([
-    "home","announcements","activities","schedule","notifications","login","registration",
-    "profile","posts","create","chat","online-hub","assistant","admin","members","applications",
-    "content","reports","owner","admins","users","private-chats","logs","settings","about"
-  ]);
-
-  app.post("/api/activity/heartbeat", requireAuth(async (req, res) => {
-    try {
-      const page = String(req.body?.page || "home").trim().slice(0, 120);
-      const resourceType = req.body?.resource_type ? String(req.body.resource_type).trim().slice(0, 60) : null;
-      const resourceId = req.body?.resource_id == null || req.body.resource_id === "" ? null : Number(req.body.resource_id);
-      const eventType = String(req.body?.event_type || "heartbeat").trim().slice(0, 80);
-      if (!allowedPages.has(page)) return res.status(400).json({ ok:false, message:"Invalid activity page." });
-      if (resourceId !== null && !Number.isInteger(resourceId)) return res.status(400).json({ ok:false, message:"Invalid resource id." });
-
-      const previous = await pool.query(
-        "SELECT current_page, resource_type, resource_id, last_activity_at FROM user_activity WHERE user_id=$1",
-        [req.user.id]
-      );
-
-      await pool.query(
-        `INSERT INTO user_activity(user_id,current_page,resource_type,resource_id,last_activity_at,last_seen_at)
-         VALUES($1,$2,$3,$4,NOW(),NOW())
-         ON CONFLICT(user_id) DO UPDATE SET
-           current_page=EXCLUDED.current_page,
-           resource_type=EXCLUDED.resource_type,
-           resource_id=EXCLUDED.resource_id,
-           last_activity_at=NOW(),
-           last_seen_at=NOW()`,
-        [req.user.id, page, resourceType, resourceId]
-      );
-
-      await pool.query(
-        "UPDATE users SET current_page=$1,last_seen_at=NOW() WHERE id=$2",
-        [page, req.user.id]
-      );
-
-      const old = previous.rows[0];
-      const changed = !old ||
-        old.current_page !== page ||
-        old.resource_type !== resourceType ||
-        Number(old.resource_id || 0) !== Number(resourceId || 0) ||
-        (Date.now() - new Date(old.last_activity_at).getTime()) > 60000;
-
-      if (changed) {
-        await pool.query(
-          `INSERT INTO activity_events(user_id,page,resource_type,resource_id,event_type,metadata)
-           VALUES($1,$2,$3,$4,$5,$6::jsonb)`,
-          [req.user.id, page, resourceType, resourceId, eventType, JSON.stringify({
-            client_at: req.body?.client_at || null
-          })]
-        );
-      }
-
-      res.json({ ok:true, activity:{ page, resource_type:resourceType, resource_id:resourceId } });
-    } catch (error) {
-      console.error("activity heartbeat failed", error);
-      res.status(500).json({ ok:false, message:"Could not save activity." });
-    }
-  }));
-
-  app.get("/api/activity/me", requireAuth(async (req, res) => {
-    try {
-      const result = await pool.query(
-        "SELECT current_page,resource_type,resource_id,last_activity_at,last_seen_at FROM user_activity WHERE user_id=$1",
-        [req.user.id]
-      );
-      res.json({ ok:true, activity:result.rows[0] || null });
-    } catch (error) {
-      console.error("activity read failed", error);
-      res.status(500).json({ ok:false, message:"Could not read activity." });
-    }
-  }));
-
-  app.get("/api/activity/users", requireRoles("admin","owner"), async (req, res) => {
-    try {
-      const result = await pool.query(
-        `SELECT ua.user_id,u.full_name,u.profile_slug,u.avatar_url,
-                ua.current_page,ua.resource_type,ua.resource_id,ua.last_activity_at
-         FROM user_activity ua
-         JOIN users u ON u.id=ua.user_id
-         WHERE u.is_active=TRUE
-         ORDER BY ua.last_activity_at DESC
-         LIMIT 500`
-      );
-      res.json({ ok:true, users:result.rows.map(x=>({ ...x, user_id:Number(x.user_id), resource_id:x.resource_id===null?null:Number(x.resource_id) })) });
-    } catch (error) {
-      console.error("activity users failed", error);
-      res.status(500).json({ ok:false, message:"Could not read activity." });
-    }
-  });
-};
+const express = require('express');
+const { query, transaction } = require('../db');
+const router=express.Router();
+function attach(requireAuth){
+  router.post('/heartbeat',requireAuth,async(req,res,next)=>{try{const page=String(req.body?.page||'home').slice(0,120),resourceType=req.body?.resource_type?String(req.body.resource_type).slice(0,60):null,resourceId=req.body?.resource_id?Number(req.body.resource_id):null;await transaction(async client=>{await client.query(`INSERT INTO user_activity(user_id,current_page,resource_type,resource_id,last_activity_at,last_seen_at) VALUES($1,$2,$3,$4,NOW(),NOW()) ON CONFLICT(user_id) DO UPDATE SET current_page=EXCLUDED.current_page,resource_type=EXCLUDED.resource_type,resource_id=EXCLUDED.resource_id,last_activity_at=NOW(),last_seen_at=NOW()`,[req.user.id,page,resourceType,resourceId]);await client.query('UPDATE users SET last_seen_at=NOW(),current_page=$2,current_resource_type=$3,current_resource_id=$4 WHERE id=$1',[req.user.id,page,resourceType,resourceId]);});res.json({ok:true,at:new Date().toISOString()});}catch(e){next(e)}});
+  router.post('/events',requireAuth,async(req,res,next)=>{try{await query('INSERT INTO activity_events(user_id,page,resource_type,resource_id,event_type,metadata) VALUES($1,$2,$3,$4,$5,$6)',[req.user.id,String(req.body?.page||'home').slice(0,120),req.body?.resource_type?String(req.body.resource_type).slice(0,60):null,req.body?.resource_id?Number(req.body.resource_id):null,String(req.body?.event_type||'interaction').slice(0,80),JSON.stringify(req.body?.metadata||{})]);res.json({ok:true});}catch(e){next(e)}});
+  router.get('/me',requireAuth,async(req,res,next)=>{try{const r=await query('SELECT * FROM user_activity WHERE user_id=$1',[req.user.id]);res.json({ok:true,activity:r.rows[0]||null});}catch(e){next(e)}});
+  router.get('/online',requireAuth,async(req,res,next)=>{try{const r=await query(`SELECT id,full_name,avatar_media_id,role,academic_year,last_seen_at,current_page FROM users WHERE is_active=TRUE AND last_seen_at>NOW()-INTERVAL '90 seconds' ORDER BY last_seen_at DESC LIMIT 100`);res.json({ok:true,count:r.rowCount,items:r.rows.map(u=>({id:Number(u.id),full_name:u.role==='owner'?'عضو الاتحاد':u.full_name,avatar_url:u.avatar_media_id?`/api/media/${u.avatar_media_id}`:null,academic_year:u.academic_year,online:true,current_page:u.current_page}))});}catch(e){next(e)}});
+}
+module.exports={router,attach};

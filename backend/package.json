@@ -1,16 +1,20 @@
 {
-  "name": "law-students-union-api",
-  "version": "1.0.0",
-  "description": "Law Students Union API",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
+  "name":"law-students-union-main",
+  "version":"2.0.0",
+  "private":true,
+  "main":"server.js",
+  "scripts":{
+    "start":"node server.js",
+    "check":"node --check server.js && node --check db.js && node --check security.js && node --check realtime.js && node --check services/intelligence.js && node --check services/assistant.js && node --check routes/auth.js && node --check routes/content.js && node --check routes/chat.js && node --check routes/activity.js && node --check routes/admin.js && node --check routes/assistant.js"
   },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "pg": "^8.13.1",
-    "@google/genai": "^1.17.0",
-    "@octokit/rest": "^22.0.0"
+  "dependencies":{
+    "@google/genai":"^1.17.0",
+    "compression":"^1.8.1",
+    "cors":"^2.8.5",
+    "express":"^4.21.2",
+    "helmet":"^8.1.0",
+    "multer":"^2.0.2",
+    "pg":"^8.13.1",
+    "ws":"^8.18.0"
   }
 }
