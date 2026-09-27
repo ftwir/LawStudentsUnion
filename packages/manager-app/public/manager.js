@@ -40,6 +40,7 @@ async function loadTab(tab){
     let data;
     if(tab==="overview")data=await api("/api/manager/overview");
     else if(tab==="users")data=await api("/api/manager/users");
+    else if(tab==="database")data=await api("/api/manager/database-summary");
     else if(tab==="registrations")data=await api("/api/manager/registrations");
     else if(tab==="content")data=await api("/api/manager/content");
     else if(tab==="activity")data=await api("/api/manager/activity");
