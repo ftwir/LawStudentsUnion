@@ -1,4 +1,4 @@
-const API_BASE='https://lawstudentsunionapi.onrender.com';
+const API_BASE=(window.LSU_API_BASE||'https://lawstudentsunionapi.onrender.com').replace(/\/$/,'');
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const path=(location.pathname.replace(/\/+$/,'')||'/');
