@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
-    RegisterView, CustomTokenObtainPairView, MFASetupView, MFAConfirmView, MeView,
+    RegisterView, CustomTokenObtainPairView, MFABootstrapView, MFABootstrapConfirmView, MFASetupView, MFAConfirmView, MeView,
     UserManagementViewSet, SubHubViewSet, PostViewSet, CommentViewSet,
     ChatRoomViewSet, MessageViewSet,
     MembershipRequestViewSet, AdminPermissionViewSet, AuditLogListView,
@@ -22,6 +22,8 @@ router.register(r"admin/permissions", AdminPermissionViewSet, basename="adminper
 urlpatterns = [
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/login/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("auth/mfa/bootstrap/", MFABootstrapView.as_view(), name="mfa-bootstrap"),
+    path("auth/mfa/bootstrap/confirm/", MFABootstrapConfirmView.as_view(), name="mfa-bootstrap-confirm"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/mfa/setup/", MFASetupView.as_view(), name="mfa-setup"),
     path("auth/mfa/confirm/", MFAConfirmView.as_view(), name="mfa-confirm"),
