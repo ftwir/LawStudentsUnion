@@ -278,3 +278,54 @@ CREATE TABLE IF NOT EXISTS poll_votes (
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  PRIMARY KEY (poll_id,user_id)
 );
+
+-- Activity and intelligence layer. These tables are domain-specific data stores
+-- inside the shared PostgreSQL database; they keep activity history independent
+-- from presentation code while preserving the existing user/content data.
+CREATE TABLE IF NOT EXISTS user_activity (
+    user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    current_page VARCHAR(120) NOT NULL DEFAULT 'home',
+    resource_type VARCHAR(60),
+    resource_id BIGINT,
+    last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_activity_last_activity ON user_activity(last_activity_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activity_page ON user_activity(current_page, last_activity_at DESC);
+
+CREATE TABLE IF NOT EXISTS activity_events (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+    page VARCHAR(120) NOT NULL,
+    resource_type VARCHAR(60),
+    resource_id BIGINT,
+    event_type VARCHAR(80) NOT NULL DEFAULT 'heartbeat',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_activity_events_user_date ON activity_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_events_page_date ON activity_events(page, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS registration_checks (
+    id BIGSERIAL PRIMARY KEY,
+    registration_id BIGINT NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
+    risk_level VARCHAR(20) NOT NULL DEFAULT 'low',
+    score INTEGER NOT NULL DEFAULT 0,
+    flags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    checked_by VARCHAR(30) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_registration_checks_registration ON registration_checks(registration_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_registration_checks_risk ON registration_checks(risk_level, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_actions (
+    id BIGSERIAL PRIMARY KEY,
+    actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    action_type VARCHAR(80) NOT NULL,
+    target_type VARCHAR(80),
+    target_id BIGINT,
+    status VARCHAR(20) NOT NULL DEFAULT 'completed',
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_actions_date ON agent_actions(created_at DESC);

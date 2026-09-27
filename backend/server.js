@@ -7,9 +7,46 @@ const crypto = require("crypto");
 
 const app = express();
 const { createOwnerRouter } = require("./routes/ownerRoutes");
+const { evaluateRegistration, normalizePhone, registrationPrompt } = require("./services/intelligence");
+const { answerAssistant } = require("./services/assistant");
 
-app.use(cors());
-app.use(express.json({ limit: "12mb" }));
+const allowedOrigins = String(process.env.CORS_ORIGINS || "").split(",").map(x => x.trim()).filter(Boolean);
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error("Origin not allowed by CORS"));
+    },
+    methods:["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+    allowedHeaders:["Content-Type","Authorization","Accept","X-Request-Id"],
+    maxAge:600
+}));
+app.use(express.json({ limit: "8mb" }));
+app.disable("x-powered-by");
+app.set("trust proxy",1);
+const rateBuckets=new Map();
+const RATE_WINDOW_MS=60000;
+const RATE_LIMIT=240;
+app.use((req,res,next)=>{
+    const key=String(req.ip||req.headers["x-forwarded-for"]||"unknown");
+    const now=Date.now();
+    let bucket=rateBuckets.get(key);
+    if(!bucket||now-bucket.startedAt>=RATE_WINDOW_MS){
+        bucket={startedAt:now,count:0};
+        rateBuckets.set(key,bucket);
+    }
+    bucket.count+=1;
+    res.setHeader("X-RateLimit-Limit",String(RATE_LIMIT));
+    res.setHeader("X-RateLimit-Remaining",String(Math.max(0,RATE_LIMIT-bucket.count)));
+    if(bucket.count>RATE_LIMIT)return res.status(429).json({ok:false,message:"طلبات كثيرة. حاول مرة أخرى بعد قليل."});
+    const requestId=String(req.headers["x-request-id"]||crypto.randomUUID());
+    res.setHeader("X-Request-Id",requestId);
+    req.requestId=requestId;
+    next();
+});
+setInterval(()=>{
+    const now=Date.now();
+    for(const [key,bucket] of rateBuckets)if(now-bucket.startedAt>RATE_WINDOW_MS*2)rateBuckets.delete(key);
+},RATE_WINDOW_MS*2).unref();
 
 const PORT = process.env.PORT || 3000;
 
@@ -20,6 +57,12 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    max: Number(process.env.DB_POOL_MAX || 10),
+    min: Number(process.env.DB_POOL_MIN || 0),
+    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
+    connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 8000),
+    statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 10000),
+    keepAlive: true,
     ssl: process.env.NODE_ENV === "production"
         ? { rejectUnauthorized: false }
         : false
@@ -105,27 +148,6 @@ app.get("/health", async (req, res) => {
         res.status(500).json({
             ok: false,
             database: "disconnected"
-        });
-    }
-});
-
-app.get("/api/test", async (req, res) => {
-    try {
-        const result = await pool.query(
-            "SELECT NOW() AS time"
-        );
-
-        res.json({
-            ok: true,
-            message: "API and database are working.",
-            time: result.rows[0].time
-        });
-    } catch (error) {
-        console.error(error);
-
-        res.status(500).json({
-            ok: false,
-            message: "Database connection failed."
         });
     }
 });
@@ -1009,43 +1031,110 @@ app.put("/api/app-settings", requireRoles("owner"), async (req, res) => {
    MEMBERSHIP APPLICATIONS + CHAT API
 ========================= */
 app.post("/api/membership/apply", async (req,res)=>{
+    const fullName=String(req.body?.full_name||"").trim();
+    const studentId=String(req.body?.student_id||"").trim();
+    const academicYear=String(req.body?.academic_year||"").trim();
+    const email=String(req.body?.email||"").trim().toLowerCase()||null;
+    const phone=String(req.body?.phone||"").trim()||null;
+    const note=String(req.body?.note||"").trim().slice(0,2000)||null;
+
+    if(!fullName||!studentId||!phone||!academicYear){
+        return res.status(400).json({ok:false,message:"الاسم ورقم القيد والهاتف والسنة الدراسية مطلوبة."});
+    }
+    if(fullName.length>150||studentId.length>50||phone.length>40||academicYear.length>50){
+        return res.status(400).json({ok:false,message:"إحدى البيانات تتجاوز الحجم المسموح."});
+    }
+    if(email&&!/^\S+@\S+\.\S+$/.test(email)){
+        return res.status(400).json({ok:false,message:"البريد الإلكتروني غير صالح."});
+    }
+
+    const client=await pool.connect();
     try{
-        const fullName=String(req.body.full_name||"").trim();
-        const studentId=String(req.body.student_id||"").trim();
-        const phone=String(req.body.phone||"").trim();
-        const academicYear=String(req.body.academic_year||"").trim();
-        const email=String(req.body.email||"").trim()||null;
-        const note=String(req.body.note||"").trim()||null;
-        if(!fullName||!studentId||!phone||!academicYear){
-            return res.status(400).json({ok:false,message:"الاسم ورقم القيد والهاتف والسنة الدراسية مطلوبة."});
-        }
-        if(fullName.length>150||studentId.length>50||phone.length>40||academicYear.length>50||(email&&email.length>255)||(note&&note.length>3000)){
-            return res.status(400).json({ok:false,message:"بيانات الطلب طويلة أكثر من المسموح."});
-        }
-        const user=await pool.query(
-            "SELECT id FROM users WHERE student_id=$1 OR ($2::text IS NOT NULL AND email=$2) LIMIT 1",
-            [studentId,email]
+        await client.query("BEGIN");
+        const existingUser=await client.query(
+            `SELECT id,student_id,email,phone
+             FROM users
+             WHERE student_id=$1
+                OR ($2::text IS NOT NULL AND LOWER(email)=LOWER($2))
+                OR ($3::text IS NOT NULL AND regexp_replace(COALESCE(phone,''),'[^0-9+]','','g')=regexp_replace($3,'[^0-9+]','','g'))
+             LIMIT 1`,
+            [studentId,email,phone]
         );
-        if(user.rows.length){
-            return res.status(409).json({ok:false,message:"يوجد حساب مسجل بهذه البيانات. استخدم تسجيل الدخول."});
+        if(existingUser.rows.length){
+            await client.query("ROLLBACK");
+            return res.status(409).json({ok:false,message:"هذا الطالب لديه حساب أو بيانات مرتبطة بحساب سابق."});
         }
-        const existing=await pool.query(
-            "SELECT id,status FROM registrations WHERE student_id=$1 AND status IN ('pending','approved') ORDER BY id DESC LIMIT 1",
+
+        const pending=await client.query(
+            `SELECT id,status FROM registrations
+             WHERE student_id=$1
+               AND status='pending'
+               AND archived_at IS NULL
+             ORDER BY id DESC LIMIT 1`,
             [studentId]
         );
-        if(existing.rows.length){
-            return res.status(409).json({ok:false,message:existing.rows[0].status==="approved"?"يوجد طلب مقبول بهذا الرقم. يمكنك تفعيل العضوية.":"يوجد طلب عضوية قيد المراجعة بهذا الرقم."});
+        if(pending.rows.length){
+            await client.query("ROLLBACK");
+            return res.status(409).json({ok:false,message:"يوجد طلب عضوية قيد المراجعة بهذا الرقم."});
         }
-        const result=await pool.query(
+
+        const normalizedPhone=normalizePhone(phone);
+        const phoneExists=await client.query(
+            "SELECT 1 FROM registrations WHERE regexp_replace(COALESCE(phone,''),'[^0-9+]','','g')=$1 AND status IN ('pending','approved') LIMIT 1",
+            [normalizedPhone]
+        );
+
+        const emailExists=email
+            ? await client.query("SELECT 1 FROM registrations WHERE LOWER(COALESCE(email,''))=LOWER($1) AND status IN ('pending','approved') LIMIT 1",[email])
+            : {rows:[]};
+
+        const assessment=evaluateRegistration(
+            {full_name:fullName,student_id:studentId,phone,email},
+            {
+                studentIdExists:false,
+                emailExists:emailExists.rows.length>0,
+                phoneExists:phoneExists.rows.length>0,
+                pendingRegistrationExists:false
+            }
+        );
+
+        const insert=await client.query(
             `INSERT INTO registrations(full_name,student_id,academic_year,email,phone,note,status)
              VALUES($1,$2,$3,$4,$5,$6,'pending')
              RETURNING id,full_name,student_id,academic_year,email,phone,note,status,created_at`,
             [fullName,studentId,academicYear,email,phone,note]
         );
-        res.status(201).json({ok:true,message:"تم تسجيل طلب العضوية بنجاح.",application:result.rows[0]});
+        const application=insert.rows[0];
+
+        await client.query(
+            `INSERT INTO registration_checks(registration_id,risk_level,score,flags,checked_by)
+             VALUES($1,$2,$3,$4::jsonb,'system')`,
+            [application.id,assessment.risk_level,assessment.score,JSON.stringify(assessment.flags)]
+        );
+
+        await client.query(
+            `INSERT INTO audit_logs(actor_user_id,action,target_type,target_id,details)
+             VALUES(NULL,'membership.application_received','registration',$1,$2::jsonb)`,
+            [application.id,JSON.stringify({
+                risk_level:assessment.risk_level,
+                score:assessment.score,
+                flags:assessment.flags
+            })]
+        );
+
+        await client.query("COMMIT");
+        return res.status(201).json({
+            ok:true,
+            message:"تم تسجيل طلب العضوية بنجاح.",
+            application,
+            verification:{risk_level:assessment.risk_level,score:assessment.score,flags:assessment.flags,summary:registrationPrompt(application,assessment)}
+        });
     }catch(error){
-        console.error(error);
-        res.status(500).json({ok:false,message:"تعذر تسجيل طلب العضوية."});
+        await client.query("ROLLBACK").catch(()=>{});
+        console.error("membership application failed",error);
+        return res.status(500).json({ok:false,message:"تعذر تسجيل طلب العضوية."});
+    }finally{
+        client.release();
     }
 });
 
@@ -1061,7 +1150,71 @@ app.get("/api/app-settings", async (req, res) => {
 
 require("./community")(app, pool, requireAuth, requireRoles, getAuthenticatedUser);
 require("./social")(app, pool, requireAuth);
+require("./routes/activity")(app, pool, requireAuth, requireRoles);
 
+
+
+app.get("/api/assistant/status", async (req,res)=>{
+  try{
+    const [db,activity,queue]=await Promise.all([
+      pool.query("SELECT NOW() AS time"),
+      pool.query("SELECT COUNT(*)::int AS active FROM user_activity WHERE last_activity_at>NOW()-INTERVAL '2 minutes'"),
+      pool.query("SELECT COUNT(*)::int AS pending FROM registrations WHERE status='pending' AND archived_at IS NULL")
+    ]);
+    res.json({ok:true,bot:{name:"LSU Guardian",mode:"rules-and-database",state:"ready"},
+      database:{connected:true,time:db.rows[0].time},
+      active_members:activity.rows[0].active,
+      pending_registrations:queue.rows[0].pending});
+  }catch(error){
+    console.error("assistant status failed",error);
+    res.status(500).json({ok:false,message:"Assistant status unavailable."});
+  }
+});
+
+app.get("/api/assistant/context", requireAuth(async (req,res)=>{
+  try{
+    const [activity,unread,chats]=await Promise.all([
+      pool.query("SELECT current_page,resource_type,resource_id,last_activity_at FROM user_activity WHERE user_id=$1",[req.user.id]),
+      pool.query("SELECT COUNT(*)::int AS count FROM user_notifications WHERE recipient_id=$1 AND is_read=FALSE",[req.user.id]),
+      pool.query("SELECT COUNT(*)::int AS count FROM conversation_members WHERE user_id=$1",[req.user.id])
+    ]);
+    res.json({ok:true,assistant:"LSU Guardian",user:{id:Number(req.user.id),role:req.user.role},
+      activity:activity.rows[0]||null,
+      unread_notifications:unread.rows[0].count,
+      conversations:chats.rows[0].count});
+  }catch(error){
+    console.error("assistant context failed",error);
+    res.status(500).json({ok:false,message:"Assistant context unavailable."});
+  }
+}));
+
+app.post("/api/assistant/chat", requireAuth(async (req,res)=>{
+  try{
+    const message=String(req.body?.message||"").trim();
+    if(!message) return res.status(400).json({ok:false,message:"اكتب رسالة للمساعد."});
+    const [activityRow,notifications,chats]=await Promise.all([
+      pool.query("SELECT current_page,resource_type,resource_id,last_activity_at,last_seen_at FROM user_activity WHERE user_id=$1",[req.user.id]),
+      pool.query("SELECT COUNT(*)::int AS count FROM user_notifications WHERE recipient_id=$1 AND is_read=FALSE",[req.user.id]),
+      pool.query("SELECT COUNT(*)::int AS count FROM conversation_members WHERE user_id=$1",[req.user.id])
+    ]);
+    const reply=await answerAssistant({
+      user:req.user,
+      activity:activityRow.rows[0]||null,
+      unreadNotifications:notifications.rows[0].count,
+      conversations:chats.rows[0].count,
+      message
+    });
+    await pool.query(
+      `INSERT INTO audit_logs(actor_user_id,action,target_type,target_id,details)
+       VALUES($1,'assistant.chat','user',$1,$2::jsonb)`,
+      [req.user.id,JSON.stringify({message:message.slice(0,500),provider:process.env.GEMINI_API_KEY?"gemini":"fallback"})]
+    );
+    res.json({ok:true,reply});
+  }catch(error){
+    console.error("assistant chat failed",error);
+    res.status(500).json({ok:false,message:"تعذر تشغيل المساعد حالياً."});
+  }
+}));
 
 
 app.post("/api/polls", requireAuth(async (req,res)=>{
@@ -1195,155 +1348,6 @@ app.post("/api/membership/activate", async (req,res)=>{
         res.status(500).json({ok:false,message:"تعذر تفعيل العضوية."});
     }
 });
-
-app.get("/api/auth-test", (req, res) => {
-    res.send(`
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>اختبار تسجيل الحساب</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 500px;
-            margin: 40px auto;
-            padding: 20px;
-        }
-
-        input,
-        button {
-            width: 100%;
-            box-sizing: border-box;
-            padding: 12px;
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
-
-        button {
-            cursor: pointer;
-        }
-
-        pre {
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-    </style>
-</head>
-
-<body>
-
-    <h2>اختبار تسجيل الحساب</h2>
-
-    <form id="registerForm">
-
-        <input
-            id="full_name"
-            placeholder="الاسم الكامل"
-            required
-        >
-
-        <input
-            id="student_id"
-            placeholder="الرقم الجامعي"
-            required
-        >
-
-        <input
-            id="email"
-            type="email"
-            placeholder="البريد الإلكتروني"
-        >
-
-        <input
-            id="password"
-            type="password"
-            placeholder="كلمة المرور"
-            required
-        >
-
-        <button type="submit">
-            إنشاء الحساب
-        </button>
-
-    </form>
-
-    <pre id="result"></pre>
-
-    <script>
-        document
-            .getElementById("registerForm")
-            .addEventListener("submit", async function(event) {
-
-                event.preventDefault();
-
-                const result =
-                    document.getElementById("result");
-
-                result.textContent =
-                    "جارٍ إنشاء الحساب...";
-
-                try {
-
-                    const response = await fetch(
-                        "/api/auth/register",
-                        {
-                            method: "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body: JSON.stringify({
-                                full_name:
-                                    document
-                                        .getElementById("full_name")
-                                        .value,
-
-                                student_id:
-                                    document
-                                        .getElementById("student_id")
-                                        .value,
-
-                                email:
-                                    document
-                                        .getElementById("email")
-                                        .value || null,
-
-                                password:
-                                    document
-                                        .getElementById("password")
-                                        .value
-                            })
-                        }
-                    );
-
-                    const data =
-                        await response.json();
-
-                    result.textContent =
-                        JSON.stringify(
-                            data,
-                            null,
-                            2
-                        );
-
-                } catch (error) {
-
-                    result.textContent =
-                        "حدث خطأ في الاتصال: " +
-                        error.message;
-                }
-            });
-    </script>
-
-</body>
-</html>
-    `);
-});
-
 
 async function processExpiredPolls(){
   try{
@@ -1503,6 +1507,14 @@ process.on('unhandledRejection',reason=>{
     console.error('UNHANDLED REJECTION:',reason);
     dispatchSelfHealing(reason instanceof Error?reason:new Error(String(reason))).catch(()=>{});
 });
+
+
+async function shutdown(signal){
+    console.log(`${signal}: shutting down`);
+    try{ await pool.end(); } finally { process.exit(0); }
+}
+process.once("SIGTERM",()=>shutdown("SIGTERM"));
+process.once("SIGINT",()=>shutdown("SIGINT"));
 
 async function startServer() {
 
