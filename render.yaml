@@ -5,14 +5,14 @@ services:
     plan: starter
     region: oregon
     rootDir: new_app/backend
-    buildCommand: pip install -r requirements.txt && python manage.py makemigrations app --noinput && python manage.py migrate --noinput && python manage.py bootstrap_agent && python manage.py collectstatic --noinput
+    buildCommand: pip install -r requirements.txt && python manage.py shell -c "from django.db import connection; connection.cursor().execute('CREATE SCHEMA IF NOT EXISTS law_union_v2')" && python manage.py makemigrations app --noinput && python manage.py migrate --noinput && python manage.py bootstrap_agent && python manage.py collectstatic --noinput
     startCommand: daphne -b 0.0.0.0 -p $PORT config.asgi:application
     healthCheckPath: /api/health/
     autoDeployTrigger: commit
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: law-union-v2-db
+          name: lawstudentsunion-db
           property: connectionString
       - key: REDIS_URL
         fromService:
@@ -49,9 +49,3 @@ services:
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
-databases:
-  - name: law-union-v2-db
-    plan: starter
-    region: oregon
-    databaseName: law_union_v2
-    user: law_union_v2_user
