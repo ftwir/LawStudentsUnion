@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101116"><title>الأنشطة والفعاليات — اتحاد طلبة كلية القانون</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-page="activities">
+<header class="topbar">
+<button class="icon-btn" id="menu" type="button" aria-label="فتح القائمة">☰</button>
+<a class="brand" href="/"><span class="brand-icon">⚖</span><span class="brand-copy"><strong>اتحاد طلبة كلية القانون</strong><small>Community</small></span></a>
+<a class="top-action notification-button" href="/notifications/" aria-label="الإشعارات">🔔<span id="notificationDot" class="notification-dot" hidden></span></a>
+</header>
+<nav class="global-tabs" aria-label="التنقل الرئيسي">
+<a data-page-link="home" href="/">الرئيسية</a><a data-page-link="announcements" href="/announcements/">الإعلانات</a><a data-page-link="activities" href="/activities/">الأنشطة</a><a data-page-link="schedule" href="/schedule/">الجدول</a><a data-page-link="posts" href="/posts/">المنشورات</a>
+</nav>
+<main><section class="page-shell"><div class="section-title"><div><h1>الأنشطة والفعاليات</h1><p>فعاليات الاتحاد ومواعيدها.</p></div><a class="btn" href="/create/" data-manager-only>إنشاء محتوى</a></div><section id="activityList" class="stack"></section></section></main>
+<nav class="bottom-nav"><a data-page-link="home" href="/">⌂<span>الرئيسية</span></a><a data-page-link="activities" href="/activities/">◈<span>الأنشطة</span></a><a href="/create/" data-auth-member>＋<span>إنشاء</span></a><a data-page-link="chat" href="/chat/" data-auth-member>▣<span>الدردشة</span></a><a href="/online-hub/" data-auth-member>◉<span>Online</span></a></nav>
+<aside id="drawer" class="drawer">
+<div class="drawer-cover"><div class="drawer-community-icon">⚖</div></div>
+<div class="drawer-profile"><div class="avatar" data-user-avatar>⚖</div><div class="drawer-profile-copy"><strong data-user-name>زائر</strong><small data-user-role>Guest</small></div><button id="closeDrawer" class="icon-btn" type="button">×</button></div>
+<div class="drawer-list">
+<div class="drawer-section">COMMUNITY</div><a href="/">الرئيسية</a><a href="/announcements/">الإعلانات</a><a href="/activities/">الأنشطة والفعاليات</a><a href="/schedule/">الجدول الدراسي</a><a href="/posts/">المنشورات</a>
+<div class="drawer-section" data-auth-guest>ACCOUNT</div><a href="/login/" data-auth-guest>تسجيل الدخول</a><a href="/registration/" data-auth-guest>طلب العضوية</a>
+<div class="drawer-section" data-auth-member>MEMBER</div><a href="/profile/" data-auth-member>ملفي الشخصي</a><a href="/chat/" data-auth-member>الدردشة</a><a href="/notifications/" data-auth-member>الإشعارات</a><a href="/online-hub/" data-auth-member>الأعضاء النشطون</a>
+<div class="drawer-section" data-manager-only>MANAGEMENT</div><a href="/admin/" data-manager-only>لوحة الإدارة</a><a href="/members/" data-manager-only>الأعضاء</a><a href="/applications/" data-manager-only>طلبات العضوية</a><a href="/content/" data-manager-only>إدارة المحتوى</a><a href="/reports/" data-manager-only>البلاغات</a>
+<div class="drawer-section" data-owner-only>OWNER</div><a href="/owner/" data-owner-only>مركز المالك</a><a href="/admins/" data-owner-only>إدارة Admins</a><a href="/users/" data-owner-only>جميع المستخدمين</a><a href="/private-chats/" data-owner-only>القنوات الخاصة</a><a href="/logs/" data-owner-only>سجل النظام</a><a href="/settings/" data-owner-only>إعدادات النظام</a>
+<div class="drawer-section">SYSTEM</div><a href="/about/">عن المجتمع</a><a href="#" id="logout" data-auth-member>تسجيل الخروج</a>
+</div></aside><div id="shade"></div><div id="toastHost" aria-live="polite" aria-atomic="true"></div>
+<script src="/app.js" defer></script>
+</body></html>
