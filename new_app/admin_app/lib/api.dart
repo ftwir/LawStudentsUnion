@@ -27,3 +27,5 @@ class AdminApi{
  Future<void> bootstrapConfirm(String token,String username,String password,String code)async{await dio.post('/api/auth/mfa/bootstrap/confirm/',data:{'bootstrap_token':token,'username':username,'password':password,'otp_token':code});}
 }
 class MfaNeeded implements Exception{}
+
+final adminApi=AdminApi(String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:8000'));
