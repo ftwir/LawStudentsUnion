@@ -1,7 +1,7 @@
 name: Law Union v2 checks
 on:
   push:
-    branches: [new-law-union-v2]
+    branches: [main]
   pull_request:
     branches: [new-law-union-v2]
 jobs:
