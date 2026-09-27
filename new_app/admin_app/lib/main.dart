@@ -52,8 +52,7 @@ class AdminLogin extends StatefulWidget {
 class _AdminLoginState extends State<AdminLogin> {
   final u = TextEditingController();
   final p = TextEditingController();
-  final o = TextEditingController();
-  bool mfa = false, busy = false;
+  bool busy = false;
   String? error;
 
   String tr(String en, String ar) =>
@@ -65,7 +64,6 @@ class _AdminLoginState extends State<AdminLogin> {
       await adminApi.login(
         u.text.trim(),
         p.text,
-        otp: mfa ? o.text.trim() : null,
       );
       if (mounted) {
         Navigator.pushReplacement(
@@ -73,14 +71,6 @@ class _AdminLoginState extends State<AdminLogin> {
           MaterialPageRoute(builder: (_) => const CommandCenter()),
         );
       }
-    } on MfaNeeded {
-      setState(() {
-        mfa = true;
-        error = tr(
-          'Enter the 6-digit code from your authenticator app.',
-          'أدخل رمز التحقق المكوّن من 6 أرقام من تطبيق المصادقة.',
-        );
-      });
     } on AuthFailed catch (e) {
       setState(() => error = e.message);
     } catch (_) {
@@ -148,19 +138,6 @@ class _AdminLoginState extends State<AdminLogin> {
                           prefixIcon: const Icon(Icons.lock_outline),
                         ),
                       ),
-                      if (mfa) ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: o,
-                          keyboardType: TextInputType.number,
-                          maxLength: 6,
-                          decoration: InputDecoration(
-                            labelText: tr('Authenticator code', 'رمز تطبيق المصادقة'),
-                            helperText: tr('6 digits', '6 أرقام'),
-                            prefixIcon: const Icon(Icons.shield_outlined),
-                          ),
-                        ),
-                      ],
                       if (error != null) ...[
                         const SizedBox(height: 8),
                         Align(
