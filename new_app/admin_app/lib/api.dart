@@ -34,15 +34,22 @@ class AdminApi {
   Future<List> hubs() async => (await dio.get('/api/subhubs/')).data;
   Future<void> createHub(String name, String description, String iconUrl) async => await dio.post('/api/subhubs/', data: {'name': name, 'description': description, 'icon_url': iconUrl});
   Future<List> audit() async => (await dio.get('/api/admin/audit-log/')).data;
-  Future<Map<String, dynamic>> bootstrapMfa(String token, String username, String password) async {
+  Future<String> bootstrapMfa(String token, String username, String password) async {
     final r = await dio.post('/api/auth/mfa/bootstrap/', data: {
       'bootstrap_token': token, 'username': username, 'password': password,
     });
-    return Map<String, dynamic>.from(r.data as Map);
+    final data = r.data;
+    if (data is! Map || data['otpauth_url'] == null) {
+      throw AuthFailed('Server did not return an MFA enrollment URI.');
+    }
+    return data['otpauth_url'].toString();
   }
-  Future<void> bootstrapConfirm(String token, String code) async {
+  Future<void> bootstrapConfirm(String token, String username, String password, String code) async {
     await dio.post('/api/auth/mfa/bootstrap/confirm/', data: {
-      'bootstrap_token': token, 'otp_token': code,
+      'bootstrap_token': token,
+      'username': username,
+      'password': password,
+      'otp_token': code,
     });
   }
   Future<String> mfaSetup() async => (await dio.post('/api/auth/mfa/setup/')).data['otpauth_url'];
