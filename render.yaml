@@ -3,7 +3,7 @@ services:
     name: law-union-api-v2
     runtime: python
     plan: starter
-    region: oregon
+    region: frankfurt
     rootDir: new_app/backend
     buildCommand: pip install -r requirements.txt && python manage.py shell -c "from django.db import connection; connection.cursor().execute('CREATE SCHEMA IF NOT EXISTS law_union_v2')" && python manage.py makemigrations app --noinput && python manage.py migrate --noinput && python manage.py bootstrap_agent && python manage.py collectstatic --noinput
     startCommand: daphne -b 0.0.0.0 -p $PORT config.asgi:application
@@ -29,8 +29,6 @@ services:
         value: agent@lawunion.local
       - key: AGENT_PASSWORD
         sync: false
-      - key: AGENT_TOTP_SECRET
-        sync: false
       - key: DEBUG_MODE
         value: "False"
       - key: DJANGO_SETTINGS_MODULE
@@ -45,7 +43,7 @@ services:
   - type: keyvalue
     name: law-union-v2-cache
     plan: starter
-    region: oregon
+    region: frankfurt
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
