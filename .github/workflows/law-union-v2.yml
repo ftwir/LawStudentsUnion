@@ -1,0 +1,55 @@
+name: Law Union v2 checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [new-law-union-v2]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: new_app/backend
+    env:
+      SECRET_KEY: test-secret
+      DEBUG_MODE: "True"
+      DATABASE_URL: sqlite:///ci.sqlite3
+      REDIS_URL: redis://localhost:6379
+      AGENT_PASSWORD: test-agent-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python manage.py makemigrations app --check --dry-run
+      - run: python manage.py migrate --noinput
+      - run: python manage.py test app -v 2
+  flutter-client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: new_app/client_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.3"
+          channel: stable
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib
+      - run: flutter analyze
+  flutter-admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: new_app/admin_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.3"
+          channel: stable
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib
+      - run: flutter analyze
