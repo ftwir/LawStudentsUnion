@@ -1,3 +1,0 @@
-import 'package:flutter/material.dart';import 'api.dart';
-class AuditLogScreen extends StatefulWidget{const AuditLogScreen({super.key});@override State<AuditLogScreen> createState()=>_State();}
-class _State extends State<AuditLogScreen>{List logs=[];Future<void> load()async{logs=await adminApi.audit();if(mounted)setState((){});}@override void initState(){super.initState();load();}@override Widget build(BuildContext c)=>RefreshIndicator(onRefresh:load,child:ListView(children:logs.map((x)=>ListTile(title:Text(x['action']??''),subtitle:Text((x['actor_username']??'system')+' · '+(x['timestamp']??'')))).toList()));}
